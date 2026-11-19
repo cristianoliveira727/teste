@@ -170,9 +170,9 @@
     <div class="oliv-boot-card">
       <img
         class="oliv-boot-logo"
-        src="assets/oliv-films-logo.png"
+        src="/teste/assets/oliv-films-logo.png"
         alt="Oliv Films"
-        onerror="this.style.display='none'; document.getElementById('oliv-boot-fallback').style.display='block';"
+        onerror="this.style.display='none'; var fallback=document.getElementById('oliv-boot-fallback'); if(fallback) fallback.style.display='block';"
       />
       <div id="oliv-boot-fallback" class="oliv-boot-fallback">OLIV FILMS</div>
       <div class="text-[10px] font-bold tracking-[.28em] text-[#C0C0C0] uppercase">Controle Patrimonial Audiovisual</div>
