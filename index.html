@@ -13,6 +13,9 @@
 
   <!-- Decodificador Óptico QR Code jsQR -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <!-- Supabase JS v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./supabase-config.js"></script>
 
   <!-- Tipografia Cinematográfica & Técnica -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -761,7 +764,7 @@
       models: savedData?.models || JSON.parse(JSON.stringify(INITIAL_MODELS)),
       categories: savedData?.categories || JSON.parse(JSON.stringify(INITIAL_CATEGORIES)),
       locations: savedData?.locations || JSON.parse(JSON.stringify(INITIAL_LOCATIONS)),
-      users: savedData?.users || JSON.parse(JSON.stringify(INITIAL_USERS)),
+      users: [],
       movements: savedData?.movements || JSON.parse(JSON.stringify(INITIAL_MOVEMENTS)),
       companySettings: Object.assign({}, DEFAULT_SETTINGS, savedData?.companySettings || {}),
       inventoryViewMode: 'CARDS',
@@ -795,23 +798,155 @@
       showUserMenu: false
     };
 
+    // =========================================================================
+    // 3A. AUTENTICAÇÃO E CAMADA DE DADOS SUPABASE
+    // =========================================================================
+    const supabaseClient = window.olivSupabase || null;
+    let cloudReady = false;
+    let cloudWriteQueue = Promise.resolve();
+
+    function roleFromDatabase(role) {
+      return ({ admin: 'ADMIN', manager: 'GERENCIADOR', employee: 'OPERADOR' })[role] || 'OPERADOR';
+    }
+    function roleToDatabase(role) {
+      return ({ ADMIN: 'admin', GERENCIADOR: 'manager', OPERADOR: 'employee' })[role] || 'employee';
+    }
+    function profileToUser(profile) {
+      return {
+        id: profile.id, name: profile.full_name || profile.email || 'Usuário',
+        email: profile.email || '', department: profile.department || 'Equipe Oliv Films',
+        role: roleFromDatabase(profile.role), status: profile.status === 'approved' ? 'APROVADO' : profile.status === 'blocked' ? 'BLOQUEADO' : 'PENDENTE',
+        isPrimaryAdmin: profile.role === 'admin'
+      };
+    }
+
+    async function loadCloudData() {
+      if (!supabaseClient) throw new Error('Conexão Supabase não inicializada.');
+      const tables = [
+        ['equipment', 'units'], ['equipment_models', 'models'],
+        ['categories', 'categories'], ['locations', 'locations'],
+        ['movements', 'movements']
+      ];
+      const results = await Promise.all(tables.map(async ([table, key]) => {
+        const { data, error } = await supabaseClient.from(table).select('id,data');
+        if (error) throw error;
+        return [key, (data || []).map(row => row.data)];
+      }));
+      results.forEach(([key, value]) => { state[key] = value; });
+      const { data: settings, error: settingsError } = await supabaseClient
+        .from('company_settings').select('data').eq('id', 'default').maybeSingle();
+      if (settingsError) throw settingsError;
+      if (settings?.data) state.companySettings = Object.assign({}, DEFAULT_SETTINGS, settings.data);
+      const { data: profile, error: profileError } = await supabaseClient
+        .from('profiles').select('*').eq('id', (await supabaseClient.auth.getUser()).data.user.id).single();
+      if (profileError) throw profileError;
+      state.currentUser = profileToUser(profile);
+      if (state.currentUser.role === 'ADMIN') {
+        const { data: profiles, error: profilesError } = await supabaseClient.from('profiles').select('*').order('created_at');
+        if (profilesError) throw profilesError;
+        state.users = (profiles || []).map(profileToUser);
+      } else {
+        state.users = [state.currentUser];
+      }
+      cloudReady = true;
+    }
+
     function persistState() {
       try {
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            units: state.units,
-            models: state.models,
-            categories: state.categories,
-            locations: state.locations,
-            users: state.users,
-            movements: state.movements,
-            companySettings: state.companySettings
-          })
-        );
-      } catch (e) {
-        console.warn('Erro ao salvar estado no localStorage:', e);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          units: state.units, models: state.models, categories: state.categories,
+          locations: state.locations, users: state.users, movements: state.movements,
+          companySettings: state.companySettings
+        }));
+      } catch (e) { console.warn('Erro ao salvar cópia local:', e); }
+
+      if (!cloudReady || !supabaseClient || !state.currentUser) return;
+      cloudWriteQueue = cloudWriteQueue.then(async () => {
+        const groups = [
+          ['equipment', state.units], ['equipment_models', state.models],
+          ['categories', state.categories], ['locations', state.locations],
+          ['movements', state.movements]
+        ];
+        for (const [table, items] of groups) {
+          const rows = (items || []).map(item => ({ id: String(item.id), data: item }));
+          if (rows.length) {
+            const { error } = await supabaseClient.from(table).upsert(rows, { onConflict: 'id' });
+            if (error) throw error;
+          }
+          const keep = rows.map(row => row.id);
+          const { data: existing, error: readError } = await supabaseClient.from(table).select('id');
+          if (readError) throw readError;
+          const stale = (existing || []).map(row => row.id).filter(id => !keep.includes(id));
+          if (stale.length) {
+            const { error } = await supabaseClient.from(table).delete().in('id', stale);
+            if (error) throw error;
+          }
+        }
+        const { error: settingsError } = await supabaseClient.from('company_settings')
+          .upsert({ id: 'default', data: state.companySettings }, { onConflict: 'id' });
+        if (settingsError) throw settingsError;
+      }).catch(error => {
+        console.error('[Oliv Films] Falha ao sincronizar:', error);
+        notify('Não foi possível sincronizar com a nuvem. Seus dados locais foram mantidos.', 'error');
+      });
+    }
+
+    async function finishCloudLogin(sessionUser) {
+      try {
+        const { data: profile, error } = await supabaseClient.from('profiles')
+          .select('*').eq('id', sessionUser.id).single();
+        if (error) throw error;
+        const user = profileToUser(profile);
+        if (user.status !== 'APROVADO') {
+          await supabaseClient.auth.signOut();
+          state.currentUser = user;
+          state.isAuthenticated = false;
+          state.authScreenMode = 'PENDING_HOLD';
+          renderApp();
+          return;
+        }
+        state.currentUser = user;
+        await loadCloudData();
+        state.isAuthenticated = true;
+        state.authError = '';
+        renderApp();
+        notify('Sessão segura iniciada. Dados sincronizados com a nuvem.', 'success');
+      } catch (error) {
+        console.error('[Oliv Films] Erro ao carregar conta/dados:', error);
+        await supabaseClient.auth.signOut();
+        state.isAuthenticated = false;
+        state.authError = 'Não foi possível carregar seu perfil. Verifique a configuração do banco.';
+        renderApp();
       }
+    }
+
+    async function submitCloudLogin(email, password) {
+      if (!supabaseClient) throw new Error('Cliente Supabase indisponível. Verifique a configuração.');
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      await finishCloudLogin(data.user);
+    }
+
+    async function submitCloudRegistration(name, email, password, department) {
+      if (!supabaseClient) throw new Error('Cliente Supabase indisponível. Verifique a configuração.');
+      const { error } = await supabaseClient.auth.signUp({
+        email, password,
+        options: { data: { full_name: name, department: department || 'Equipe Externa' } }
+      });
+      if (error) throw error;
+      state.authScreenMode = 'PENDING_HOLD';
+      state.authError = '';
+      renderApp();
+      notify('Solicitação enviada. Confirme seu e-mail, se solicitado, e aguarde aprovação.', 'success');
+    }
+
+    async function requestCloudPasswordReset(email) {
+      if (!supabaseClient) throw new Error('Cliente Supabase indisponível.');
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + window.location.pathname
+      });
+      if (error) throw error;
+      notify('Se o e-mail estiver cadastrado, você receberá instruções de recuperação.', 'success');
     }
 
     // =========================================================================
@@ -881,8 +1016,10 @@
       return true;
     }
 
-    function handleLogout(msg = 'Sessão encerrada com segurança.') {
+    async function handleLogout(msg = 'Sessão encerrada com segurança.') {
       stopLiveScannerCamera();
+      if (supabaseClient) await supabaseClient.auth.signOut();
+      cloudReady = false;
       state.isAuthenticated = false;
       state.currentUser = null;
       state.authScreenMode = 'LOGIN';
@@ -3222,11 +3359,20 @@
           renderApp();
           break;
 
-        case 'recover-send':
-          notify('Instruções de recuperação enviadas para o seu e-mail.', 'info');
-          state.authScreenMode = 'LOGIN';
-          renderApp();
+        case 'recover-send': {
+          const recoveryInput = document.querySelector('input[placeholder="E-mail cadastrado"]');
+          const recoveryEmail = (recoveryInput?.value || state.authEmail || '').trim().toLowerCase();
+          if (!recoveryEmail) {
+            state.authError = 'Informe o e-mail cadastrado.';
+            renderApp();
+            break;
+          }
+          requestCloudPasswordReset(recoveryEmail).catch(error => {
+            state.authError = error.message || 'Falha ao solicitar recuperação.';
+            renderApp();
+          });
           break;
+        }
 
         case 'switch-user':
           handleSwitchUser();
@@ -3591,78 +3737,28 @@
 
       if (form.id === 'login-form') {
         const email = document.getElementById('login-email').value.trim().toLowerCase();
-        const pass = document.getElementById('login-password').value.trim();
+        const pass = document.getElementById('login-password').value;
         state.authEmail = email;
-        state.authPassword = pass;
-
-        if (email === 'cristianoliveira727@gmail.com' && pass === '1234') {
-          const master = state.users.find((u) => u.email.toLowerCase() === email) || INITIAL_USERS[0];
-          state.currentUser = master;
-          state.isAuthenticated = true;
-          state.authError = '';
+        state.authPassword = '';
+        try {
+          await submitCloudLogin(email, pass);
+        } catch (error) {
+          state.authError = error.message || 'E-mail ou senha inválidos.';
           renderApp();
-          notify(`Bem-vindo, ${master.name} (Administrador Master)!`, 'success');
-          return;
         }
-
-        const found = state.users.find((u) => u.email.toLowerCase() === email);
-        if (!found) {
-          state.authError = 'E-mail não encontrado. Solicite seu cadastro abaixo.';
-          renderApp();
-          return;
-        }
-        if ((found.password || '1234') !== pass) {
-          state.authError = 'Senha incorreta para este usuário.';
-          renderApp();
-          return;
-        }
-        if (found.status === 'PENDENTE') {
-          state.currentUser = found;
-          state.authScreenMode = 'PENDING_HOLD';
-          renderApp();
-          return;
-        }
-        if (found.status !== 'APROVADO') {
-          state.authError = `Acesso bloqueado: status ${found.status}.`;
-          renderApp();
-          return;
-        }
-
-        state.currentUser = found;
-        state.isAuthenticated = true;
-        state.authError = '';
-        renderApp();
-        notify(`Sessão iniciada como ${found.name} (${found.role}).`, 'success');
       }
 
       else if (form.id === 'register-request-form') {
         const name = document.getElementById('reg-req-name').value.trim();
         const email = document.getElementById('reg-req-email').value.trim().toLowerCase();
-        const password = document.getElementById('reg-req-pass').value.trim();
+        const password = document.getElementById('reg-req-pass').value;
         const dept = document.getElementById('reg-req-dept').value.trim();
-
-        if (state.users.some((u) => u.email.toLowerCase() === email)) {
-          state.authError = 'Este e-mail já possui cadastro ou solicitação.';
+        try {
+          await submitCloudRegistration(name, email, password, dept);
+        } catch (error) {
+          state.authError = error.message || 'Não foi possível enviar o cadastro.';
           renderApp();
-          return;
         }
-
-        const newUser = {
-          id: `usr-${Date.now()}`,
-          name,
-          email,
-          password,
-          department: dept || 'Equipe Externa',
-          role: 'OPERADOR',
-          status: 'PENDENTE',
-          isPrimaryAdmin: false,
-          createdAt: new Date().toISOString()
-        };
-        state.users.push(newUser);
-        persistState();
-        state.currentUser = newUser;
-        state.authScreenMode = 'PENDING_HOLD';
-        renderApp();
       }
 
       else if (form.id === 'manual-scan-form') {
@@ -3963,7 +4059,7 @@
     });
 
     // Inicialização e verificação de parâmetros de Achados e Perdidos (?achado=OLF-CAM-000001)
-    window.onload = function () {
+    window.onload = async function () {
       const params = new URLSearchParams(window.location.search);
       const achado = params.get('achado') || params.get('eqp');
       if (achado) {
@@ -3974,7 +4070,23 @@
           serialNumber: 'Identificado via QR Code'
         };
       }
-      renderApp();
+      if (!supabaseClient) {
+        state.authError = 'Conexão com o Supabase não carregou. Atualize a página ou confira supabase-config.js.';
+        renderApp();
+        return;
+      }
+      const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
+      if (sessionError) console.error(sessionError);
+      if (sessionData?.session?.user) await finishCloudLogin(sessionData.session.user);
+      else renderApp();
+      supabaseClient.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
+          cloudReady = false;
+          state.isAuthenticated = false;
+          state.currentUser = null;
+          renderApp();
+        }
+      });
     };
   </script>
 </body>
