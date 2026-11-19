@@ -2908,8 +2908,10 @@
               </div>
 
               <div class="bg-[#080808] border border-white/15 rounded-xl p-4 text-left flex items-center gap-4">
-                <div class="w-14 h-14 rounded-lg bg-[#181818] border border-white/10 flex items-center justify-center shrink-0">
-                  <i data-lucide="camera" class="w-6 h-6 text-[#C0C0C0]"></i>
+                <div class="w-24 h-24 rounded-lg bg-[#181818] border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
+                  ${unit.photos && unit.photos.length > 0
+                    ? `<img src="${unit.photos[0]}" alt="Foto de ${escapeHtml(unit.name)}" class="w-full h-full object-contain p-1" />`
+                    : '<i data-lucide="camera" class="w-6 h-6 text-[#C0C0C0]"></i>'}
                 </div>
                 <div class="min-w-0">
                   <span class="px-2 py-0.5 rounded bg-[#C0C0C0] text-black font-mono text-[11px] font-black">${escapeHtml(unit.code)}</span>
