@@ -582,6 +582,8 @@
     const supabaseClient = window.olivSupabase || null;
     let cloudReady = false;
     let cloudWriteQueue = Promise.resolve();
+    let profileRealtimeChannel = null;
+    let accessRevocationInProgress = false;
 
     function roleFromDatabase(role) {
       return ({ admin: 'ADMIN', manager: 'GERENCIADOR', employee: 'OPERADOR' })[role] || 'OPERADOR';
@@ -596,6 +598,45 @@
         role: roleFromDatabase(profile.role), status: profile.status === 'approved' ? 'APROVADO' : profile.status === 'blocked' ? 'BLOQUEADO' : 'PENDENTE',
         isPrimaryAdmin: profile.role === 'admin'
       };
+    }
+
+    function stopProfileRealtime() {
+      if (profileRealtimeChannel && supabaseClient) {
+        supabaseClient.removeChannel(profileRealtimeChannel);
+        profileRealtimeChannel = null;
+      }
+    }
+
+    function subscribeToOwnProfile(userId) {
+      stopProfileRealtime();
+      if (!supabaseClient || !userId) return;
+      profileRealtimeChannel = supabaseClient
+        .channel('oliv-profile-' + userId)
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: 'id=eq.' + userId
+        }, async (payload) => {
+          const profile = payload.new;
+          if (!profile || !state.currentUser || state.currentUser.id !== userId) return;
+          const updatedUser = profileToUser(profile);
+          state.currentUser = updatedUser;
+          if (updatedUser.status !== 'APROVADO' && !accessRevocationInProgress) {
+            accessRevocationInProgress = true;
+            stopLiveScannerCamera();
+            await handleLogout('Seu acesso ao Oliv Films foi bloqueado ou suspenso pelo administrador.');
+            accessRevocationInProgress = false;
+            return;
+          }
+          if (state.isAuthenticated) renderApp();
+        })
+        .subscribe((status, error) => {
+          if (error) console.error('[Oliv Films] Falha no monitoramento do perfil:', error);
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.warn('[Oliv Films] Monitoramento em tempo real indisponível; a proteção do banco continua ativa.');
+          }
+        });
     }
 
     async function loadCloudData() {
@@ -694,6 +735,7 @@
         await loadCloudData();
         state.isAuthenticated = true;
         state.authError = '';
+        subscribeToOwnProfile(sessionUser.id);
         renderApp();
         notify('Sessão segura iniciada. Dados sincronizados com a nuvem.', 'success');
       } catch (error) {
@@ -803,6 +845,7 @@
 
     async function handleLogout(msg = 'Sessão encerrada com segurança.') {
       stopLiveScannerCamera();
+      stopProfileRealtime();
       if (supabaseClient) await supabaseClient.auth.signOut();
       cloudReady = false;
       state.isAuthenticated = false;
@@ -3879,6 +3922,7 @@
       else renderApp();
       supabaseClient.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT') {
+          stopProfileRealtime();
           cloudReady = false;
           state.isAuthenticated = false;
           state.currentUser = null;
