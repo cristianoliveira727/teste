@@ -744,6 +744,7 @@
     }
 
     async function loadCloudData(profile) {
+      const loadStartedAt = performance.now();
       if (!supabaseClient) throw new Error('Conexão Supabase não inicializada.');
       if (!profile?.id) throw new Error('Perfil da sessão não encontrado.');
       const tables = [
@@ -752,10 +753,11 @@
         ['movements', 'movements']
       ];
 
-      // O perfil já foi consultado no início do login. Reutilizá-lo evita
-      // uma segunda consulta de rede e reduz o tempo até a tela principal.
+      // As tabelas operacionais são consultadas em paralelo.
       const tableResults = await Promise.all(tables.map(async ([table, key]) => {
+        const startedAt = performance.now();
         const { data, error } = await supabaseClient.from(table).select('id,data');
+        console.info('[Oliv Films] Tempo de carregamento:', table, Math.round(performance.now() - startedAt) + ' ms');
         if (error) {
           console.error('[Oliv Films] Falha ao carregar tabela:', table, {
             code: error.code, message: error.message, details: error.details, hint: error.hint
@@ -766,8 +768,10 @@
       }));
       tableResults.forEach(([key, value]) => { state[key] = value; });
 
+      const settingsStartedAt = performance.now();
       const settingsResult = await supabaseClient.from('company_settings')
         .select('data').eq('id', 'default').maybeSingle();
+      console.info('[Oliv Films] Tempo de carregamento: company_settings', Math.round(performance.now() - settingsStartedAt) + ' ms');
       if (settingsResult.error) {
         console.error('[Oliv Films] Falha ao carregar company_settings:', settingsResult.error);
         throw new Error('Falha ao carregar configurações: ' + settingsResult.error.message);
@@ -775,7 +779,9 @@
       state.companySettings = Object.assign({}, DEFAULT_SETTINGS, settingsResult.data?.data || {});
       state.currentUser = profileToUser(profile);
       if (state.currentUser.role === 'ADMIN') {
+        const profilesStartedAt = performance.now();
         const { data: profiles, error: profilesError } = await supabaseClient.from('profiles').select('*').order('created_at');
+        console.info('[Oliv Films] Tempo de carregamento: lista de usuários', Math.round(performance.now() - profilesStartedAt) + ' ms');
         if (profilesError) {
           console.error('[Oliv Films] Falha ao carregar lista de perfis:', profilesError);
           throw new Error('Falha ao carregar usuários: ' + profilesError.message);
@@ -785,6 +791,7 @@
         state.users = [state.currentUser];
       }
       cloudReady = true;
+      console.info('[Oliv Films] Tempo total dos dados operacionais:', Math.round(performance.now() - loadStartedAt) + ' ms');
     }
 
     function persistState() {
@@ -835,10 +842,14 @@
     }
 
     async function finishCloudLogin(sessionUser) {
+      const loginStartedAt = performance.now();
       try {
         console.info('[Oliv Films] Login: consultando perfil...');
+        const profileStartedAt = performance.now();
         const { data: profile, error } = await supabaseClient.from('profiles')
           .select('*').eq('id', sessionUser.id).single();
+        console.info('[Oliv Films] Tempo de autenticação + perfil:', Math.round(performance.now() - loginStartedAt) + ' ms');
+        console.info('[Oliv Films] Tempo de consulta do perfil:', Math.round(performance.now() - profileStartedAt) + ' ms');
         if (error) {
           console.error('[Oliv Films] Falha ao consultar perfil:', error);
           throw error;
@@ -862,6 +873,7 @@
         subscribeToOwnProfile(sessionUser.id);
         subscribeToOperationalData();
         renderApp();
+        console.info('[Oliv Films] Tempo total até abrir o painel:', Math.round(performance.now() - loginStartedAt) + ' ms');
         notify('Sessão segura iniciada. Dados sincronizados com a nuvem.', 'success');
       } catch (error) {
         console.error('[Oliv Films] Erro ao carregar conta/dados:', {
