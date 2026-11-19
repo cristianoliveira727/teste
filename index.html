@@ -854,7 +854,9 @@
       }
     }
 
-    let loginSubmissionInProgress = false;\n\n    async function submitCloudLogin(email, password) {
+    let loginSubmissionInProgress = false;
+
+    async function submitCloudLogin(email, password) {
       if (!supabaseClient) throw new Error('Cliente Supabase indisponível. Verifique a configuração.');
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) throw error;
