@@ -754,21 +754,32 @@
 
       // O perfil já foi consultado no início do login. Reutilizá-lo evita
       // uma segunda consulta de rede e reduz o tempo até a tela principal.
-      const [tableResults, settingsResult] = await Promise.all([
-        Promise.all(tables.map(async ([table, key]) => {
-          const { data, error } = await supabaseClient.from(table).select('id,data');
-          if (error) throw error;
-          return [key, (data || []).map(row => row.data)];
-        })),
-        supabaseClient.from('company_settings').select('data').eq('id', 'default').maybeSingle()
-      ]);
+      const tableResults = await Promise.all(tables.map(async ([table, key]) => {
+        const { data, error } = await supabaseClient.from(table).select('id,data');
+        if (error) {
+          console.error('[Oliv Films] Falha ao carregar tabela:', table, {
+            code: error.code, message: error.message, details: error.details, hint: error.hint
+          });
+          throw new Error('Falha ao carregar ' + table + ': ' + error.message);
+        }
+        return [key, (data || []).map(row => row.data)];
+      }));
       tableResults.forEach(([key, value]) => { state[key] = value; });
-      if (settingsResult.error) throw settingsResult.error;
+
+      const settingsResult = await supabaseClient.from('company_settings')
+        .select('data').eq('id', 'default').maybeSingle();
+      if (settingsResult.error) {
+        console.error('[Oliv Films] Falha ao carregar company_settings:', settingsResult.error);
+        throw new Error('Falha ao carregar configurações: ' + settingsResult.error.message);
+      }
       state.companySettings = Object.assign({}, DEFAULT_SETTINGS, settingsResult.data?.data || {});
       state.currentUser = profileToUser(profile);
       if (state.currentUser.role === 'ADMIN') {
         const { data: profiles, error: profilesError } = await supabaseClient.from('profiles').select('*').order('created_at');
-        if (profilesError) throw profilesError;
+        if (profilesError) {
+          console.error('[Oliv Films] Falha ao carregar lista de perfis:', profilesError);
+          throw new Error('Falha ao carregar usuários: ' + profilesError.message);
+        }
         state.users = (profiles || []).map(profileToUser);
       } else {
         state.users = [state.currentUser];
@@ -825,9 +836,14 @@
 
     async function finishCloudLogin(sessionUser) {
       try {
+        console.info('[Oliv Films] Login: consultando perfil...');
         const { data: profile, error } = await supabaseClient.from('profiles')
           .select('*').eq('id', sessionUser.id).single();
-        if (error) throw error;
+        if (error) {
+          console.error('[Oliv Films] Falha ao consultar perfil:', error);
+          throw error;
+        }
+        console.info('[Oliv Films] Login: perfil carregado.');
         const user = profileToUser(profile);
         if (user.status !== 'APROVADO') {
           await supabaseClient.auth.signOut();
@@ -838,7 +854,9 @@
           return;
         }
         state.currentUser = user;
+        console.info('[Oliv Films] Login: carregando dados operacionais...');
         await loadCloudData(profile);
+        console.info('[Oliv Films] Login: dados carregados.');
         state.isAuthenticated = true;
         state.authError = '';
         subscribeToOwnProfile(sessionUser.id);
@@ -846,10 +864,12 @@
         renderApp();
         notify('Sessão segura iniciada. Dados sincronizados com a nuvem.', 'success');
       } catch (error) {
-        console.error('[Oliv Films] Erro ao carregar conta/dados:', error);
+        console.error('[Oliv Films] Erro ao carregar conta/dados:', {
+          message: error?.message, code: error?.code, details: error?.details, hint: error?.hint
+        });
         await supabaseClient.auth.signOut();
         state.isAuthenticated = false;
-        state.authError = 'Não foi possível carregar seu perfil. Verifique a configuração do banco.';
+        state.authError = error?.message || 'Não foi possível carregar os dados da conta.';
         renderApp();
       }
     }
