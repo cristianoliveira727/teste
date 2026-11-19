@@ -2552,6 +2552,7 @@
                       ${usr.status !== 'BLOQUEADO' ? `
                         <button type="button" data-action="change-user-status" data-id="${usr.id}" data-status="BLOQUEADO" class="px-3 py-1.5 rounded-lg bg-[#C8102E]/20 text-[#C8102E] border border-[#C8102E]/40 font-bold text-[11px] uppercase cursor-pointer">Bloquear</button>
                       ` : ''}
+                      <button type="button" data-action="delete-user" data-id="${usr.id}" class="px-3 py-1.5 rounded-lg bg-red-900/30 text-red-300 border border-red-500/40 font-bold text-[11px] uppercase cursor-pointer hover:bg-red-900/60">Excluir</button>
                     </div>
                   </div>
                 ` : ''}
@@ -3662,6 +3663,31 @@
           };
           renderApp();
           break;
+
+        case 'delete-user': {
+          if (!isAdmin() || !supabaseClient) break;
+          const usr = state.users.find((u) => u.id === btn.getAttribute('data-id'));
+          if (!usr || usr.isPrimaryAdmin || usr.id === state.currentUser?.id) {
+            notify('Este usuário não pode ser excluído por aqui.', 'error');
+            break;
+          }
+          const confirmed = window.confirm('Tem certeza que deseja excluir definitivamente o usuário ' + usr.name + ' (' + usr.email + ')? Esta ação removerá também o acesso de login e não poderá ser desfeita.');
+          if (!confirmed) break;
+          btn.disabled = true;
+          btn.textContent = 'Excluindo...';
+          const { error } = await supabaseClient.rpc('admin_delete_user', { p_user_id: usr.id });
+          if (error) {
+            console.error('[Oliv Films] Falha ao excluir usuário:', error);
+            notify('Não foi possível excluir o usuário: ' + error.message, 'error');
+            btn.disabled = false;
+            btn.textContent = 'Excluir';
+            break;
+          }
+          state.users = state.users.filter((u) => u.id !== usr.id);
+          renderApp();
+          notify('Usuário ' + usr.name + ' excluído com sucesso.', 'success');
+          break;
+        }
 
         case 'change-user-status': {
           if (!isAdmin() || !supabaseClient) break;
