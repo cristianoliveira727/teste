@@ -743,34 +743,29 @@
         });
     }
 
-    async function loadCloudData() {
+    async function loadCloudData(profile) {
       if (!supabaseClient) throw new Error('Conexão Supabase não inicializada.');
+      if (!profile?.id) throw new Error('Perfil da sessão não encontrado.');
       const tables = [
         ['equipment', 'units'], ['equipment_models', 'models'],
         ['categories', 'categories'], ['locations', 'locations'],
         ['movements', 'movements']
       ];
-      const authResult = await supabaseClient.auth.getUser();
-      if (authResult.error) throw authResult.error;
-      const userId = authResult.data?.user?.id;
-      if (!userId) throw new Error('Sessão não encontrada. Entre novamente.');
 
-      // Carrega inventário, configurações e perfil em paralelo para reduzir
-      // o tempo entre a autenticação e a abertura da tela principal.
-      const [tableResults, settingsResult, profileResult] = await Promise.all([
+      // O perfil já foi consultado no início do login. Reutilizá-lo evita
+      // uma segunda consulta de rede e reduz o tempo até a tela principal.
+      const [tableResults, settingsResult] = await Promise.all([
         Promise.all(tables.map(async ([table, key]) => {
           const { data, error } = await supabaseClient.from(table).select('id,data');
           if (error) throw error;
           return [key, (data || []).map(row => row.data)];
         })),
-        supabaseClient.from('company_settings').select('data').eq('id', 'default').maybeSingle(),
-        supabaseClient.from('profiles').select('*').eq('id', userId).single()
+        supabaseClient.from('company_settings').select('data').eq('id', 'default').maybeSingle()
       ]);
       tableResults.forEach(([key, value]) => { state[key] = value; });
       if (settingsResult.error) throw settingsResult.error;
       state.companySettings = Object.assign({}, DEFAULT_SETTINGS, settingsResult.data?.data || {});
-      if (profileResult.error) throw profileResult.error;
-      state.currentUser = profileToUser(profileResult.data);
+      state.currentUser = profileToUser(profile);
       if (state.currentUser.role === 'ADMIN') {
         const { data: profiles, error: profilesError } = await supabaseClient.from('profiles').select('*').order('created_at');
         if (profilesError) throw profilesError;
@@ -843,7 +838,7 @@
           return;
         }
         state.currentUser = user;
-        await loadCloudData();
+        await loadCloudData(profile);
         state.isAuthenticated = true;
         state.authError = '';
         subscribeToOwnProfile(sessionUser.id);
