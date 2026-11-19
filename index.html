@@ -752,55 +752,45 @@
         ['categories', 'categories'], ['locations', 'locations'],
         ['movements', 'movements']
       ];
-      const currentUser = profileToUser(profile);
 
-      // Todas as leituras independentes são executadas juntas.
-      // Isso evita esperar as tabelas terminarem para só então buscar
-      // configurações e usuários.
-      const [tableResults, settingsResult, profilesResult] = await Promise.all([
-        Promise.all(tables.map(async ([table, key]) => {
-          const startedAt = performance.now();
-          const { data, error } = await supabaseClient.from(table).select('id,data');
-          console.info('[Oliv Films] Tempo de carregamento:', table, Math.round(performance.now() - startedAt) + ' ms');
-          if (error) {
-            console.error('[Oliv Films] Falha ao carregar tabela:', table, {
-              code: error.code, message: error.message, details: error.details, hint: error.hint
-            });
-            throw new Error('Falha ao carregar ' + table + ': ' + error.message);
-          }
-          return [key, (data || []).map(row => row.data)];
-        })),
-        (async () => {
-          const startedAt = performance.now();
-          const result = await supabaseClient.from('company_settings')
-            .select('data').eq('id', 'default').maybeSingle();
-          console.info('[Oliv Films] Tempo de carregamento: company_settings', Math.round(performance.now() - startedAt) + ' ms');
-          if (result.error) {
-            console.error('[Oliv Films] Falha ao carregar company_settings:', result.error);
-            throw new Error('Falha ao carregar configurações: ' + result.error.message);
-          }
-          return result;
-        })(),
-        currentUser.role === 'ADMIN'
-          ? (async () => {
-              const startedAt = performance.now();
-              const result = await supabaseClient.from('profiles').select('*').order('created_at');
-              console.info('[Oliv Films] Tempo de carregamento: lista de usuários', Math.round(performance.now() - startedAt) + ' ms');
-              if (result.error) {
-                console.error('[Oliv Films] Falha ao carregar lista de perfis:', result.error);
-                throw new Error('Falha ao carregar usuários: ' + result.error.message);
-              }
-              return result;
-            })()
-          : Promise.resolve(null)
-      ]);
-
+      // O perfil já foi consultado no início do login. Reutilizá-lo evita
+      // uma segunda consulta de rede e reduz o tempo até a tela principal.
+      const tableResults = await Promise.all(tables.map(async ([table, key]) => {
+        const startedAt = performance.now();
+        const { data, error } = await supabaseClient.from(table).select('id,data');
+        console.info('[Oliv Films] Tempo de carregamento:', table, Math.round(performance.now() - startedAt) + ' ms');
+        if (error) {
+          console.error('[Oliv Films] Falha ao carregar tabela:', table, {
+            code: error.code, message: error.message, details: error.details, hint: error.hint
+          });
+          throw new Error('Falha ao carregar ' + table + ': ' + error.message);
+        }
+        return [key, (data || []).map(row => row.data)];
+      }));
       tableResults.forEach(([key, value]) => { state[key] = value; });
+
+      const settingsStartedAt = performance.now();
+      const settingsResult = await supabaseClient.from('company_settings')
+        .select('data').eq('id', 'default').maybeSingle();
+      console.info('[Oliv Films] Tempo de carregamento: company_settings', Math.round(performance.now() - settingsStartedAt) + ' ms');
+      if (settingsResult.error) {
+        console.error('[Oliv Films] Falha ao carregar company_settings:', settingsResult.error);
+        throw new Error('Falha ao carregar configurações: ' + settingsResult.error.message);
+      }
       state.companySettings = Object.assign({}, DEFAULT_SETTINGS, settingsResult.data?.data || {});
-      state.currentUser = currentUser;
-      state.users = profilesResult
-        ? (profilesResult.data || []).map(profileToUser)
-        : [currentUser];
+      state.currentUser = profileToUser(profile);
+      if (state.currentUser.role === 'ADMIN') {
+        const profilesStartedAt = performance.now();
+        const { data: profiles, error: profilesError } = await supabaseClient.from('profiles').select('*').order('created_at');
+        console.info('[Oliv Films] Tempo de carregamento: lista de usuários', Math.round(performance.now() - profilesStartedAt) + ' ms');
+        if (profilesError) {
+          console.error('[Oliv Films] Falha ao carregar lista de perfis:', profilesError);
+          throw new Error('Falha ao carregar usuários: ' + profilesError.message);
+        }
+        state.users = (profiles || []).map(profileToUser);
+      } else {
+        state.users = [state.currentUser];
+      }
       cloudReady = true;
       console.info('[Oliv Films] Tempo total dos dados operacionais:', Math.round(performance.now() - loadStartedAt) + ' ms');
     }
