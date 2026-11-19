@@ -666,7 +666,8 @@
             accessRevocationInProgress = false;
             return;
           }
-          if (state.isAuthenticated) renderApp();
+          // Atualiza os dados de acesso em memória sem reconstruir a tela.
+          // A interface permanece estável enquanto formulários estiverem abertos.
         })
         .subscribe((status, error) => {
           if (error) console.error('[Oliv Films] Falha no monitoramento do perfil:', error);
