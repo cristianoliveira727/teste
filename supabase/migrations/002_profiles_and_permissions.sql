@@ -66,3 +66,38 @@ begin
   end loop;
 end $$;
 
+
+-- Restringe cadastros estruturais e configurações a administradores/gerentes.
+create or replace function public.can_manage_inventory()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.profiles p
+    where p.id = (select auth.uid())
+      and p.status = 'approved'
+      and p.role in ('admin','manager')
+  );
+$$;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['equipment_models','categories','locations','company_settings']
+  loop
+    execute format('drop policy if exists "approved_insert" on public.%I', t);
+    execute format('drop policy if exists "manager_insert" on public.%I', t);
+    execute format('create policy "manager_insert" on public.%I for insert to authenticated with check (public.can_manage_inventory())', t);
+
+    execute format('drop policy if exists "approved_update" on public.%I', t);
+    execute format('drop policy if exists "manager_update" on public.%I', t);
+    execute format('create policy "manager_update" on public.%I for update to authenticated using (public.can_manage_inventory()) with check (public.can_manage_inventory())', t);
+  end loop;
+
+  execute 'drop policy if exists "approved_insert" on public.equipment';
+  execute 'drop policy if exists "manager_insert" on public.equipment';
+  execute 'create policy "manager_insert" on public.equipment for insert to authenticated with check (public.can_manage_inventory())';
+end $$;
