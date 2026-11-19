@@ -524,7 +524,7 @@
       const { data: settings, error: settingsError } = await supabaseClient
         .from('company_settings').select('data').eq('id', 'default').maybeSingle();
       if (settingsError) throw settingsError;
-      if (settings?.data) state.companySettings = Object.assign({}, DEFAULT_SETTINGS, settings.data);
+      state.companySettings = Object.assign({}, DEFAULT_SETTINGS, settings?.data || {});
       const { data: profile, error: profileError } = await supabaseClient
         .from('profiles').select('*').eq('id', (await supabaseClient.auth.getUser()).data.user.id).single();
       if (profileError) throw profileError;
