@@ -599,6 +599,7 @@
       if (!stateKey) return;
       const eventType = payload.eventType;
       const row = eventType === 'DELETE' ? payload.old : payload.new;
+      console.info('[Oliv Films] Evento Realtime recebido:', table, eventType, row?.id ?? '(sem ID)');
       if (!row || row.id === undefined || row.id === null) return;
       const rows = Array.isArray(state[stateKey]) ? state[stateKey] : [];
       const id = String(row.id);
@@ -626,6 +627,7 @@
         }, payload => applyRealtimeRow(table, payload));
       }
       dataRealtimeChannel = channel.subscribe((status, error) => {
+        console.info('[Oliv Films] Estado da sincronização Realtime:', status);
         if (error) console.error('[Oliv Films] Falha na sincronização em tempo real:', error);
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.warn('[Oliv Films] Sincronização em tempo real indisponível; atualize os dados manualmente se necessário.');
