@@ -817,29 +817,36 @@
 
       if (!cloudReady || !supabaseClient || !state.currentUser) return;
       cloudWriteQueue = cloudWriteQueue.then(async () => {
-        const groups = [
-          ['equipment', state.units], ['equipment_models', state.models],
-          ['categories', state.categories], ['locations', state.locations],
-          ['movements', state.movements]
-        ];
+        const canManage = ['ADMIN', 'GERENCIADOR'].includes(state.currentUser.role);
+        const groups = canManage
+          ? [
+              ['equipment', state.units], ['equipment_models', state.models],
+              ['categories', state.categories], ['locations', state.locations],
+              ['movements', state.movements]
+            ]
+          : [['equipment', state.units], ['movements', state.movements]];
         for (const [table, items] of groups) {
           const rows = (items || []).map(item => ({ id: typeof item === 'string' ? item : String(item.id), data: item }));
           if (rows.length) {
             const { error } = await supabaseClient.from(table).upsert(rows, { onConflict: 'id' });
             if (error) throw error;
           }
-          const keep = rows.map(row => row.id);
-          const { data: existing, error: readError } = await supabaseClient.from(table).select('id');
-          if (readError) throw readError;
-          const stale = (existing || []).map(row => row.id).filter(id => !keep.includes(id));
-          if (stale.length) {
-            const { error } = await supabaseClient.from(table).delete().in('id', stale);
-            if (error) throw error;
+          if (canManage) {
+            const keep = rows.map(row => row.id);
+            const { data: existing, error: readError } = await supabaseClient.from(table).select('id');
+            if (readError) throw readError;
+            const stale = (existing || []).map(row => row.id).filter(id => !keep.includes(id));
+            if (stale.length) {
+              const { error } = await supabaseClient.from(table).delete().in('id', stale);
+              if (error) throw error;
+            }
           }
         }
-        const { error: settingsError } = await supabaseClient.from('company_settings')
-          .upsert({ id: 'default', data: state.companySettings }, { onConflict: 'id' });
-        if (settingsError) throw settingsError;
+        if (canManage) {
+          const { error: settingsError } = await supabaseClient.from('company_settings')
+            .upsert({ id: 'default', data: state.companySettings }, { onConflict: 'id' });
+          if (settingsError) throw settingsError;
+        }
       }).catch(error => {
         console.error('[Oliv Films] Falha ao sincronizar:', error);
         notify('Não foi possível sincronizar com a nuvem. Seus dados locais foram mantidos.', 'error');
