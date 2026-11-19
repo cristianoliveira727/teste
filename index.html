@@ -752,8 +752,8 @@
       isAuthenticated: false,
       currentUser: null,
       authScreenMode: 'LOGIN',
-      authEmail: 'cristianoliveira727@gmail.com',
-      authPassword: '1234',
+      authEmail: '',
+      authPassword: '',
       authError: '',
       activeTab: 'dashboard',
       globalSearch: '',
@@ -886,6 +886,8 @@
       state.isAuthenticated = false;
       state.currentUser = null;
       state.authScreenMode = 'LOGIN';
+      state.authEmail = '';
+      state.authPassword = '';
       state.authError = '';
       state.showUserMenu = false;
       state.showNotificationsDrawer = false;
@@ -896,7 +898,7 @@
     }
 
     function handleSwitchUser() {
-      handleLogout('Para alternar de usuário, entre com o e-mail e a senha exclusivos da conta desejada.');
+      handleLogout('Para alternar de usuário, entre com o e-mail e a senha da conta desejada.');
     }
 
     function isUnitOverdue(unit) {
@@ -1083,17 +1085,52 @@
     let liveScanRafId = null;
     let liveLastDecoded = { code: '', time: 0 };
     let liveCameraStarting = false;
+    let liveCameraSessionId = 0;
 
     function stopLiveScannerCamera() {
+      liveCameraSessionId++;
       if (liveScanRafId) {
         cancelAnimationFrame(liveScanRafId);
         liveScanRafId = null;
       }
+      const vid = document.getElementById('live-qr-video');
+      if (vid) {
+        try {
+          vid.pause();
+          vid.srcObject = null;
+          vid.classList.add('opacity-0');
+          vid.classList.remove('opacity-90');
+        } catch (e) {}
+      }
       if (liveCameraStream) {
-        liveCameraStream.getTracks().forEach((track) => track.stop());
+        liveCameraStream.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch (e) {}
+        });
         liveCameraStream = null;
       }
       liveCameraStarting = false;
+      state.scannerCameraActive = false;
+    }
+
+    function navigateToTab(targetTab) {
+      const leavingScanner = state.activeTab === 'scanner' && targetTab !== 'scanner';
+      if (leavingScanner || targetTab !== 'scanner') {
+        stopLiveScannerCamera();
+      }
+
+      state.activeTab = targetTab;
+      state.mobileMenuOpen = false;
+      state.showNotificationsDrawer = false;
+      state.showUserMenu = false;
+
+      if (targetTab === 'scanner') {
+        state.scannerCameraActive = true;
+        state.scannerErrorMsg = '';
+      }
+
+      renderApp();
     }
 
     function startLiveDecodeLoop() {
@@ -1161,13 +1198,14 @@
     }
 
     async function requestAndStartMobileCamera() {
-      if (liveCameraStarting) return;
+      if (liveCameraStarting || state.activeTab !== 'scanner' || !state.isAuthenticated) return;
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         state.scannerErrorMsg = 'Acesso direto à câmera requer HTTPS ou localhost. Digite o código ou use leitor USB.';
         renderApp();
         return;
       }
 
+      const currentSession = ++liveCameraSessionId;
       liveCameraStarting = true;
       state.scannerCameraActive = true;
       state.scannerErrorMsg = '';
@@ -1183,9 +1221,15 @@
           stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         }
 
-        if (state.activeTab !== 'scanner' || !state.scannerCameraActive) {
+        // Se o usuário saiu da Central de Bipagem enquanto a câmera abria, encerra imediatamente as trilhas
+        if (
+          currentSession !== liveCameraSessionId ||
+          !state.isAuthenticated ||
+          state.activeTab !== 'scanner' ||
+          !state.scannerCameraActive
+        ) {
           stream.getTracks().forEach((t) => t.stop());
-          liveCameraStarting = false;
+          if (currentSession === liveCameraSessionId) liveCameraStarting = false;
           return;
         }
 
@@ -1193,9 +1237,11 @@
         liveCameraStarting = false;
         attachStreamToVideoElement();
       } catch (err) {
+        if (currentSession !== liveCameraSessionId) return;
         liveCameraStarting = false;
+        state.scannerCameraActive = false;
         state.scannerErrorMsg = 'Permissão de câmera negada ou indisponível. Toque para tentar novamente.';
-        renderApp();
+        if (state.activeTab === 'scanner') renderApp();
       }
     }
 
@@ -1221,13 +1267,27 @@
 
     function syncLiveScannerCamera() {
       if (state.isAuthenticated && state.activeTab === 'scanner' && state.scannerCameraActive) {
-        if (liveCameraStream) {
+        const isStreamAlive =
+          liveCameraStream &&
+          liveCameraStream.getVideoTracks().some((t) => t.readyState === 'live');
+
+        if (isStreamAlive) {
           attachStreamToVideoElement();
-        } else if (!liveCameraStarting && !state.scannerErrorMsg) {
-          requestAndStartMobileCamera();
+        } else {
+          if (liveCameraStream) {
+            liveCameraStream.getTracks().forEach((t) => {
+              try { t.stop(); } catch (e) {}
+            });
+            liveCameraStream = null;
+          }
+          if (!liveCameraStarting && !state.scannerErrorMsg) {
+            requestAndStartMobileCamera();
+          }
         }
       } else {
-        stopLiveScannerCamera();
+        if (liveCameraStream || liveCameraStarting || liveScanRafId) {
+          stopLiveScannerCamera();
+        }
       }
     }
 
@@ -1329,20 +1389,20 @@
             ` : ''}
 
             ${state.authScreenMode === 'LOGIN' ? `
-              <form id="login-form" class="space-y-4">
+              <form id="login-form" class="space-y-4" autocomplete="off">
                 <div>
                   <label class="block text-xs uppercase tracking-wider text-white/70 mb-1.5 font-semibold">E-mail de Acesso</label>
                   <div class="relative">
                     <i data-lucide="mail" class="w-4 h-4 text-[#C0C0C0] absolute left-3.5 top-3"></i>
-                    <input id="login-email" type="email" required value="${escapeHtml(state.authEmail)}" placeholder="seuemail@olivfilms.com.br" class="w-full bg-[#080808] border border-white/15 focus:border-[#C0C0C0] rounded-xl pl-10 pr-4 py-2.5 text-xs text-white outline-none" />
+                    <input id="login-email" type="email" required autocomplete="off" value="${escapeHtml(state.authEmail)}" placeholder="Digite seu e-mail" class="w-full bg-[#080808] border border-white/15 focus:border-[#C0C0C0] rounded-xl pl-10 pr-4 py-2.5 text-xs text-white outline-none" />
                   </div>
                 </div>
 
                 <div>
-                  <label class="block text-xs uppercase tracking-wider text-white/70 mb-1.5 font-semibold">Senha Exclusiva</label>
+                  <label class="block text-xs uppercase tracking-wider text-white/70 mb-1.5 font-semibold">Senha</label>
                   <div class="relative">
                     <i data-lucide="lock" class="w-4 h-4 text-[#C0C0C0] absolute left-3.5 top-3"></i>
-                    <input id="login-password" type="password" required value="${escapeHtml(state.authPassword)}" placeholder="••••" class="w-full bg-[#080808] border border-white/15 focus:border-[#C0C0C0] rounded-xl pl-10 pr-4 py-2.5 text-xs text-white outline-none" />
+                    <input id="login-password" type="password" required autocomplete="new-password" value="${escapeHtml(state.authPassword)}" placeholder="Digite sua senha" class="w-full bg-[#080808] border border-white/15 focus:border-[#C0C0C0] rounded-xl pl-10 pr-4 py-2.5 text-xs text-white outline-none" />
                   </div>
                 </div>
 
@@ -3178,19 +3238,7 @@
 
         case 'switch-tab': {
           const targetTab = btn.getAttribute('data-tab');
-          state.activeTab = targetTab;
-          state.mobileMenuOpen = false;
-          state.showNotificationsDrawer = false;
-          state.showUserMenu = false;
-          if (targetTab === 'scanner') {
-            state.scannerCameraActive = true;
-            state.scannerErrorMsg = '';
-            renderApp();
-            requestAndStartMobileCamera();
-          } else {
-            stopLiveScannerCamera();
-            renderApp();
-          }
+          navigateToTab(targetTab);
           break;
         }
 
@@ -3245,16 +3293,7 @@
           const tab = btn.getAttribute('data-tab');
           const uid = btn.getAttribute('data-unit');
           if (uid) state.scannedUnitId = uid;
-          state.activeTab = tab;
-          state.showNotificationsDrawer = false;
-          if (tab === 'scanner') {
-            state.scannerCameraActive = true;
-            state.scannerErrorMsg = '';
-            renderApp();
-            requestAndStartMobileCamera();
-          } else {
-            renderApp();
-          }
+          navigateToTab(tab);
           break;
         }
 
@@ -3335,24 +3374,22 @@
         case 'open-unit-in-scanner':
           state.scannedUnitId = btn.getAttribute('data-id');
           state.selectedUnitDetailId = null;
-          state.activeTab = 'scanner';
-          state.scannerCameraActive = true;
-          state.scannerErrorMsg = '';
-          renderApp();
-          requestAndStartMobileCamera();
+          navigateToTab('scanner');
           break;
 
         case 'retry-scanner-camera':
           e.stopPropagation();
           state.scannerErrorMsg = '';
-          requestAndStartMobileCamera();
+          state.scannerCameraActive = true;
+          renderApp();
           break;
 
         case 'flip-scanner-camera':
           e.stopPropagation();
           state.scannerFacingMode = state.scannerFacingMode === 'environment' ? 'user' : 'environment';
           stopLiveScannerCamera();
-          requestAndStartMobileCamera();
+          state.scannerCameraActive = true;
+          renderApp();
           break;
 
         case 'clear-scanned-unit':
@@ -3519,6 +3556,7 @@
       if (target.id === 'global-search-input') {
         state.globalSearch = target.value;
         if (state.activeTab !== 'inventory' && target.value.trim().length > 1) {
+          stopLiveScannerCamera();
           state.activeTab = 'inventory';
         }
         renderApp();
@@ -3880,8 +3918,7 @@
         if (state.showNotificationsDrawer) { state.showNotificationsDrawer = false; renderApp(); return; }
         if (state.showUserMenu) { state.showUserMenu = false; renderApp(); return; }
         if (state.isAuthenticated && state.activeTab !== 'dashboard') {
-          state.activeTab = 'dashboard';
-          renderApp();
+          navigateToTab('dashboard');
         }
         return;
       }
@@ -3892,18 +3929,37 @@
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
         const now = Date.now();
-        if (now - usbLastKeyTime > 120) usbScannerBuffer = '';
+        if (now - usbLastKeyTime > 120) {
+          usbScannerBuffer = '';
+        }
         usbLastKeyTime = now;
 
         if (e.key === 'Enter' && usbScannerBuffer.length >= 3) {
           e.preventDefault();
-          const code = usbScannerBuffer;
+          const scanned = usbScannerBuffer;
           usbScannerBuffer = '';
-          processCodeScan(code);
+          processCodeScan(scanned);
         } else if (e.key.length === 1) {
           usbScannerBuffer += e.key;
         }
       }
+    });
+
+    // Desativa a câmera automaticamente se o navegador for minimizado/trocado de aba e reativa ao voltar na Central de Bipagem
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (liveCameraStream || liveCameraStarting || liveScanRafId) {
+          stopLiveScannerCamera();
+        }
+      } else if (state.isAuthenticated && state.activeTab === 'scanner') {
+        state.scannerCameraActive = true;
+        state.scannerErrorMsg = '';
+        syncLiveScannerCamera();
+      }
+    });
+
+    window.addEventListener('pagehide', () => {
+      stopLiveScannerCamera();
     });
 
     // Inicialização e verificação de parâmetros de Achados e Perdidos (?achado=OLF-CAM-000001)
