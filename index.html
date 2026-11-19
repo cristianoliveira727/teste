@@ -557,6 +557,7 @@
       regCondition: 'Perfeito',
       regDescription: '',
       regAccessories: [],
+      regEditUnitId: null,
       regPhotos: [],
       scannedUnitId: null,
       scannerActiveOp: null,
@@ -1769,6 +1770,7 @@
                   <div class="px-4 py-2.5 bg-[#080808] border-t border-white/10 text-[11px] text-white/70 truncate">
                     ${unit.status === 'RETIRADO' ? `Com: ${escapeHtml(unit.currentHolder)}` : escapeHtml(unit.location)}
                   </div>
+                  ${isManagerOrAdmin() ? `<div class="px-4 pb-3 flex gap-2" data-stop-card-open="true"><button type="button" data-action="edit-unit" data-id="${unit.id}" class="flex-1 py-2 rounded-lg bg-[#C0C0C0]/15 border border-[#C0C0C0]/30 text-[#C0C0C0] text-[10px] font-bold uppercase">Editar</button><button type="button" data-action="delete-unit" data-id="${unit.id}" class="flex-1 py-2 rounded-lg bg-[#C8102E]/10 border border-[#C8102E]/30 text-[#C8102E] text-[10px] font-bold uppercase">Excluir</button></div>` : ''}
                 </div>
               `).join('')}
             </div>
@@ -1784,6 +1786,7 @@
                       <th class="py-3 px-4">Nº Série</th>
                       <th class="py-3 px-4">Status</th>
                       <th class="py-3 px-4">Localização / Responsável</th>
+                      ${isManagerOrAdmin() ? '<th class="py-3 px-4">Ações</th>' : ''}
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/5">
@@ -1795,6 +1798,7 @@
                         <td class="py-3 px-4 font-mono text-white/60">${escapeHtml(unit.serialNumber)}</td>
                         <td class="py-3 px-4">${escapeHtml(unit.status)}</td>
                         <td class="py-3 px-4 text-white/70">${unit.status === 'RETIRADO' ? escapeHtml(unit.currentHolder) : escapeHtml(unit.location)}</td>
+                        ${isManagerOrAdmin() ? `<td class="py-3 px-4"><div class="flex gap-1.5" data-stop-row-open="true"><button type="button" data-action="edit-unit" data-id="${unit.id}" class="px-2.5 py-1.5 rounded bg-[#C0C0C0]/15 text-[#C0C0C0] font-bold text-[10px]">Editar</button><button type="button" data-action="delete-unit" data-id="${unit.id}" class="px-2.5 py-1.5 rounded bg-[#C8102E]/15 text-[#C8102E] font-bold text-[10px]">Excluir</button></div></td>` : ''}
                       </tr>
                     `).join('')}
                   </tbody>
@@ -1821,7 +1825,8 @@
         `;
       }
 
-      const previewCode = generateUniquePatrimonialCode(state.regCategory);
+      const editingUnit = state.regEditUnitId ? state.units.find((u) => u.id === state.regEditUnitId) : null;
+      const previewCode = editingUnit ? editingUnit.code : generateUniquePatrimonialCode(state.regCategory);
       const qrPayload = buildEquipmentQRPayload(previewCode, state.companySettings);
 
       return `
@@ -1832,8 +1837,8 @@
                 <i data-lucide="plus" class="w-5 h-5 text-[#C8102E]"></i>
               </div>
               <div>
-                <h2 class="text-base font-bold text-white uppercase tracking-wider">Cadastrar Novo Equipamento</h2>
-                <p class="text-xs text-white/50">Preencha os dados objetivos para gerar o código patrimonial e o QR Code</p>
+                <h2 class="text-base font-bold text-white uppercase tracking-wider">${editingUnit ? 'Editar Equipamento' : 'Cadastrar Novo Equipamento'}</h2>
+                <p class="text-xs text-white/50">${editingUnit ? 'Atualize os dados do equipamento mantendo seu código patrimonial e histórico.' : 'Preencha os dados objetivos para gerar o código patrimonial e o QR Code'}</p>
               </div>
             </div>
             <div class="bg-[#080808] border border-[#C0C0C0]/50 px-4 py-2 rounded-xl text-right">
@@ -1971,7 +1976,7 @@
               </div>
 
               <button type="submit" class="w-full py-3.5 px-4 rounded-xl bg-[#C8102E] hover:bg-[#a50d26] text-white font-bold text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(200,16,46,0.4)] transition-all cursor-pointer flex items-center justify-center gap-2">
-                <i data-lucide="check-circle-2" class="w-4 h-4"></i> Salvar Equipamento no Estoque
+                <i data-lucide="check-circle-2" class="w-4 h-4"></i> ${editingUnit ? 'Salvar Alterações' : 'Salvar Equipamento no Estoque'}
               </button>
             </div>
           </form>
@@ -3422,7 +3427,25 @@
           renderApp();
           break;
 
+        case 'edit-unit': {
+          if (!checkPermission(['ADMIN', 'GERENCIADOR'])) break;
+          const unit=state.units.find(u=>u.id===btn.getAttribute('data-id')); if(!unit) break;
+          state.regEditUnitId=unit.id; state.regName=unit.name||''; state.regBrandModel=`${unit.brand||''} ${unit.model||''}`.trim();
+          state.regCategory=unit.category||state.categories[0]?.name||'Câmeras'; state.regSerialNumber=unit.serialNumber||'';
+          state.regLocation=unit.location||state.locations[0]; state.regCondition=unit.condition||'Perfeito'; state.regDescription=unit.description||'';
+          state.regAccessories=Array.isArray(unit.accessories)?unit.accessories.map(item=>({...item})):[]; state.regPhotos=Array.isArray(unit.photos)?[...unit.photos]:[];
+          state.selectedUnitDetailId=null; state.activeTab='register'; renderApp(); break;
+        }
+        case 'delete-unit': {
+          if (!checkPermission(['ADMIN', 'GERENCIADOR'])) break;
+          const unit=state.units.find(u=>u.id===btn.getAttribute('data-id')); if(!unit) break;
+          if(unit.status==='RETIRADO'){notify('Devolva o equipamento ao estoque antes de excluí-lo.','error');break;}
+          if(!window.confirm(`Tem certeza que deseja excluir ${unit.code} — ${unit.name}? O histórico de movimentações será preservado.`)) break;
+          state.units=state.units.filter(u=>u.id!==unit.id); if(state.scannedUnitId===unit.id)state.scannedUnitId=null;
+          if(state.selectedUnitDetailId===unit.id)state.selectedUnitDetailId=null; persistState(); renderApp(); notify(`Equipamento ${unit.code} excluído do inventário.`,'success'); break;
+        }
         case 'open-unit-detail':
+          if (e.target.closest('[data-stop-card-open], [data-stop-row-open]')) break;
           state.selectedUnitDetailId = btn.getAttribute('data-id');
           renderApp();
           break;
@@ -3912,69 +3935,18 @@
 
       else if (form.id === 'register-equipment-form') {
         if (!checkPermission(['ADMIN', 'GERENCIADOR'])) return;
-        const uniqueCode = generateUniquePatrimonialCode(state.regCategory);
-        const finalSerial = state.regSerialNumber.trim()
-          ? state.regSerialNumber.trim().toUpperCase()
-          : `SN-${uniqueCode.split('-').slice(1).join('-')}`;
-
-        if (state.units.some((u) => u.serialNumber.toLowerCase() === finalSerial.toLowerCase())) {
-          notify('Este Número de Série já está cadastrado!', 'error');
-          return;
-        }
-
-        const cleanBM = state.regBrandModel.trim() || state.regName.trim();
-        const parts = cleanBM.split(' ');
-        const brand = parts[0] || 'Oliv Films';
-        const model = parts.slice(1).join(' ') || cleanBM;
-
-        const newUnit = {
-          id: `unit-${Date.now()}`,
-          code: uniqueCode,
-          name: state.regName.trim(),
-          brand,
-          model,
-          serialNumber: finalSerial,
-          category: state.regCategory,
-          description: state.regDescription.trim() || 'Equipamento operacional do acervo Oliv Films.',
-          accessories: state.regAccessories.filter(item => item.name.trim()).map(item => ({
-            name: item.name.trim(),
-            quantity: Math.max(1, Number(item.quantity) || 1),
-            notes: (item.notes || '').trim()
-          })),
-          acquisitionValue: 0,
-          condition: state.regCondition,
-          status: 'DISPONÍVEL',
-          location: state.regLocation,
-          notes: '',
-          photos: [...state.regPhotos],
-          usageCount: 0
-        };
-
-        state.units.push(newUnit);
-        state.movements.unshift({
-          id: `mov-reg-${Date.now()}`,
-          type: 'CADASTRO',
-          unitId: newUnit.id,
-          unitCode: newUnit.code,
-          unitName: newUnit.name,
-          holderName: newUnit.location,
-          purpose: 'Cadastro de Equipamento e Geração de QR Code',
-          project: 'Acervo Oliv Films',
-          timestamp: new Date().toISOString(),
-          authorizedBy: state.currentUser.name,
-          status: 'CONCLUÍDO'
-        });
-
-        state.regName = '';
-        state.regBrandModel = '';
-        state.regSerialNumber = '';
-        state.regDescription = '';
-        state.regAccessories = [];
-        state.regPhotos = [];
-        state.selectedUnitDetailId = newUnit.id;
-        persistState();
-        renderApp();
-        notify(`Equipamento ${uniqueCode} cadastrado com sucesso!`, 'success');
+        const editing=state.regEditUnitId?state.units.find(u=>u.id===state.regEditUnitId):null;
+        if(state.regEditUnitId&&!editing){notify('Equipamento não encontrado para edição.','error');return;}
+        const uniqueCode=editing?editing.code:generateUniquePatrimonialCode(state.regCategory);
+        const finalSerial=state.regSerialNumber.trim()?state.regSerialNumber.trim().toUpperCase():`SN-${uniqueCode.split('-').slice(1).join('-')}`;
+        if(state.units.some(u=>u.id!==editing?.id&&(u.serialNumber||'').toLowerCase()===finalSerial.toLowerCase())){notify('Este Número de Série já está cadastrado!','error');return;}
+        const cleanBM=state.regBrandModel.trim()||state.regName.trim(); const parts=cleanBM.split(' ');
+        const fields={name:state.regName.trim(),brand:parts[0]||'Oliv Films',model:parts.slice(1).join(' ')||cleanBM,serialNumber:finalSerial,category:state.regCategory,description:state.regDescription.trim()||'Equipamento operacional do acervo Oliv Films.',accessories:state.regAccessories.filter(item=>item.name.trim()).map(item=>({name:item.name.trim(),quantity:Math.max(1,Number(item.quantity)||1),notes:(item.notes||'').trim()})),condition:state.regCondition,location:state.regLocation,photos:[...state.regPhotos]};
+        let savedUnit;
+        if(editing){Object.assign(editing,fields);savedUnit=editing;state.movements.unshift({id:`mov-edit-${Date.now()}`,type:'EDIÇÃO',unitId:editing.id,unitCode:editing.code,unitName:editing.name,holderName:editing.status==='RETIRADO'?(editing.currentHolder||''):editing.location,purpose:'Atualização dos dados cadastrais do equipamento',project:'Acervo Oliv Films',timestamp:new Date().toISOString(),authorizedBy:state.currentUser.name,status:'CONCLUÍDO'});}
+        else{savedUnit={id:`unit-${Date.now()}`,code:uniqueCode,...fields,acquisitionValue:0,status:'DISPONÍVEL',notes:'',usageCount:0};state.units.push(savedUnit);state.movements.unshift({id:`mov-reg-${Date.now()}`,type:'CADASTRO',unitId:savedUnit.id,unitCode:savedUnit.code,unitName:savedUnit.name,holderName:savedUnit.location,purpose:'Cadastro de Equipamento e Geração de QR Code',project:'Acervo Oliv Films',timestamp:new Date().toISOString(),authorizedBy:state.currentUser.name,status:'CONCLUÍDO'});}
+        state.regEditUnitId=null;state.regName='';state.regBrandModel='';state.regSerialNumber='';state.regDescription='';state.regAccessories=[];state.regPhotos=[];state.selectedUnitDetailId=savedUnit.id;persistState();renderApp();
+        notify(editing?`Equipamento ${uniqueCode} atualizado com sucesso!`:`Equipamento ${uniqueCode} cadastrado com sucesso!`,'success');
       }
 
       else if (form.id === 'create-category-form') {
