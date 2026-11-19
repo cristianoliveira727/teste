@@ -13,6 +13,9 @@
 
   <!-- Decodificador Óptico QR Code jsQR -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <!-- Supabase JS v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./supabase-config.js"></script>
 
   <!-- Tipografia Cinematográfica & Técnica -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -65,6 +68,80 @@
       animation: laserScan 2s ease-in-out infinite;
     }
 
+    /* Tela de inicialização — Oliv Films */
+    #oliv-boot-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: #080808;
+      color: #F5F5F5;
+      opacity: 1;
+      visibility: visible;
+      transition: opacity .28s ease, visibility .28s ease;
+    }
+    #oliv-boot-screen.is-leaving {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .oliv-boot-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: min(100%, 360px);
+      padding: 34px 28px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 20px;
+      background: #181818;
+      box-shadow: 0 24px 80px rgba(0,0,0,.38);
+      text-align: center;
+    }
+    .oliv-boot-logo {
+      display: block;
+      width: 160px;
+      height: auto;
+      max-width: 100%;
+      max-height: none;
+      object-fit: contain;
+      object-position: center;
+      overflow: visible;
+      margin: 0 auto 22px;
+    }
+    .oliv-boot-fallback {
+      display: none;
+      margin-bottom: 22px;
+      color: #fff;
+      font-size: 27px;
+      font-weight: 900;
+      letter-spacing: .18em;
+    }
+    .oliv-boot-spinner {
+      width: 30px;
+      height: 30px;
+      margin-top: 26px;
+      border: 3px solid rgba(255,255,255,.14);
+      border-top-color: #C8102E;
+      border-right-color: #C8102E;
+      border-radius: 50%;
+      animation: olivBootSpin .85s linear infinite;
+    }
+    .oliv-boot-status {
+      margin-top: 13px;
+      color: #C0C0C0;
+      font: 700 10px/1.5 'JetBrains Mono', monospace;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    @keyframes olivBootSpin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      #oliv-boot-screen { transition: none; }
+      .oliv-boot-spinner { animation-duration: 2.5s; }
+    }
+
     /* Impressão limpa de etiquetas e relatórios */
     @media print {
       body * {
@@ -92,6 +169,22 @@
 </head>
 <body class="min-h-screen bg-[#080808] text-[#F5F5F5] selection:bg-[#C8102E] selection:text-white">
 
+  <!-- Tela inicial exibida enquanto a sessão e os dados são verificados -->
+  <div id="oliv-boot-screen" role="status" aria-live="polite" aria-label="Carregando sistema Oliv Films">
+    <div class="oliv-boot-card">
+      <img
+        class="oliv-boot-logo"
+        src="/teste/assets/oliv-films-logo.webp"
+        alt="Oliv Films"
+        onerror="this.style.display='none'; var fallback=document.getElementById('oliv-boot-fallback'); if(fallback) fallback.style.display='block';"
+      />
+      <div id="oliv-boot-fallback" class="oliv-boot-fallback">OLIV FILMS</div>
+      <div class="text-[10px] font-bold tracking-[.28em] text-[#C0C0C0] uppercase">Controle Patrimonial Audiovisual</div>
+      <div class="oliv-boot-spinner" aria-hidden="true"></div>
+      <div class="oliv-boot-status">Inicializando sistema patrimonial...</div>
+    </div>
+  </div>
+
   <!-- CONTAINER RAIZ DA APLICAÇÃO -->
   <div id="app-root"></div>
 
@@ -103,329 +196,17 @@
     // =========================================================================
     // 1. DADOS INICIAIS DO ACERVO PATRIMONIAL & USUÁRIOS OLIV FILMS
     // =========================================================================
-    const INITIAL_CATEGORIES = [
-      { id: 'cat-1', name: 'Câmeras', prefix: 'CAM', subcategories: ['Cinema Digital', 'Full-Frame', 'Super 35', 'Alta Velocidade'] },
-      { id: 'cat-2', name: 'Lentes', prefix: 'LEN', subcategories: ['Anamórficas PL', 'Prime Cinema', 'Zoom Cinema', 'Full-Frame E/RF'] },
-      { id: 'cat-3', name: 'Iluminação', prefix: 'ILU', subcategories: ['LED COB Alta Potência', 'Painéis RGBWW', 'Tubos Pixel', 'Modificadores & Softbox'] },
-      { id: 'cat-4', name: 'Áudio', prefix: 'AUD', subcategories: ['Gravadores Multipista', 'Microfones Shotgun', 'Sistemas Sem Fio', 'Boom & Acessórios'] },
-      { id: 'cat-5', name: 'Estabilizadores', prefix: 'EST', subcategories: ['Gimbal 3 Eixos', 'Steadicam & Coletes', 'Easyrig'] },
-      { id: 'cat-6', name: 'Tripés e suportes', prefix: 'TRI', subcategories: ['Cabeças Fluidas', 'Tripés Fibra de Carbono', 'Hi-Hat & Sliders', 'Grip & C-Stands'] },
-      { id: 'cat-7', name: 'Monitores', prefix: 'MON', subcategories: ['Monitores de Câmera 5"/7"', 'Monitores de Direção 17"+', 'Transmissores Sem Fio'] },
-      { id: 'cat-8', name: 'Acessórios', prefix: 'ACE', subcategories: ['Matte Box & Filtros ND', 'Follow Focus Wireless', 'Cages & Baseplates'] },
-      { id: 'cat-9', name: 'Cabos e conexões', prefix: 'CAB', subcategories: ['SDI 12G Blindado', 'Timecode & Genlock', 'Alimentação D-Tap / Lemo'] },
-      { id: 'cat-10', name: 'Armazenamento', prefix: 'ARM', subcategories: ['Cartões CFexpress Type A/B', 'Módulos Codex / SSD', 'Leitores de Alta Velocidade'] },
-      { id: 'cat-11', name: 'Energia e baterias', prefix: 'ENE', subcategories: ['Baterias V-Mount', 'Baterias Gold Mount', 'Estações de Carga Rápida'] },
-      { id: 'cat-12', name: 'Computadores e periféricos', prefix: 'COM', subcategories: ['Estações DIT', 'MacBook Pro M-Series', 'Calibradores de Cor'] },
-      { id: 'cat-13', name: 'Equipamentos de produção', prefix: 'PRD', subcategories: ['Rádios Comunicadores', 'Claquete Digital Timecode', 'Carrinhos de Set'] },
-      { id: 'cat-14', name: 'Outros', prefix: 'OUT', subcategories: ['Cases Pelican', 'Ferramentas de Set', 'Geral'] }
-    ];
+    const INITIAL_CATEGORIES = [];
 
-    const INITIAL_LOCATIONS = [
-      'Cofre A1 — Câmeras & Sensores',
-      'Cofre A2 — Óptica & Lentes Cinema',
-      'Sala B1 — Iluminação & Grip',
-      'Estante C1 — Áudio & Captação',
-      'Estante D2 — Energia, Baterias & Cabos',
-      'Laboratório de Manutenção Técnica'
-    ];
+    const INITIAL_LOCATIONS = [];
 
-    const INITIAL_USERS = [
-      {
-        id: 'usr-admin',
-        name: 'Cristian Oliveira',
-        email: 'cristianoliveira727@gmail.com',
-        password: '1234',
-        department: 'Direção Executiva & Patrimônio',
-        role: 'ADMIN',
-        status: 'APROVADO',
-        isPrimaryAdmin: true,
-        createdAt: '2026-01-10T09:00:00Z'
-      },
-      {
-        id: 'usr-gerente',
-        name: 'Mariana Vasconcelos',
-        email: 'mariana@olivfilms.com.br',
-        password: '1234',
-        department: 'Coordenação Técnica & Acervo',
-        role: 'GERENCIADOR',
-        status: 'APROVADO',
-        isPrimaryAdmin: false,
-        createdAt: '2026-02-14T11:30:00Z'
-      },
-      {
-        id: 'usr-operador',
-        name: 'Rafael Lima',
-        email: 'rafael@olivfilms.com.br',
-        password: '1234',
-        department: 'Almoxarifado & Logística de Set',
-        role: 'OPERADOR',
-        status: 'APROVADO',
-        isPrimaryAdmin: false,
-        createdAt: '2026-03-05T10:15:00Z'
-      },
-      {
-        id: 'usr-pendente',
-        name: 'Beatriz Almeida',
-        email: 'beatriz.ac@producao.com.br',
-        password: '1234',
-        department: '1ª Assistente de Câmera (1st AC)',
-        role: 'OPERADOR',
-        status: 'PENDENTE',
-        isPrimaryAdmin: false,
-        createdAt: '2026-11-14T13:45:00Z'
-      }
-    ];
+    // Usuários e credenciais são gerenciados exclusivamente pelo Supabase Auth.
 
-    const INITIAL_MODELS = [
-      {
-        id: 'mod-fx3',
-        name: 'Sony FX3 Full-Frame Cinema Line',
-        brand: 'Sony',
-        model: 'ILME-FX3',
-        category: 'Câmeras',
-        description: 'Câmera Cinema Full-Frame 4K 120fps com alça superior XLR, sensor Exmor R e S-Cinetone.'
-      },
-      {
-        id: 'mod-alexa',
-        name: 'ARRI ALEXA Mini LF',
-        brand: 'ARRI',
-        model: 'ALEXA Mini LF',
-        category: 'Câmeras',
-        description: 'Corpo de câmera cinema Large Format com montagem LPL, filtros FSND internos e ARRIRAW.'
-      },
-      {
-        id: 'mod-cooke',
-        name: 'Cooke Anamorphic/i 50mm T2.3',
-        brand: 'Cooke',
-        model: 'Anamorphic/i 50mm',
-        category: 'Lentes',
-        description: 'Objetiva Prime Anamórfica 2x montagem PL com tecnologia /i metadata.'
-      },
-      {
-        id: 'mod-aputure',
-        name: 'Aputure LS 600d Pro',
-        brand: 'Aputure',
-        model: 'LS 600d Pro',
-        category: 'Iluminação',
-        description: 'Refletor LED Daylight 5600K de 600W com controle Sidus Link e DMX512.'
-      },
-      {
-        id: 'mod-sounddev',
-        name: 'Sound Devices MixPre-6 II',
-        brand: 'Sound Devices',
-        model: 'MixPre-6 II',
-        category: 'Áudio',
-        description: 'Gravador e mixer de áudio 32-bit float com pré-amplificadores Kashmir e Timecode.'
-      }
-    ];
+    const INITIAL_MODELS = [];
 
-    const INITIAL_UNITS = [
-      {
-        id: 'unit-001',
-        code: 'OLF-CAM-000001',
-        name: 'Sony FX3 Full-Frame Cinema Line (Unidade A)',
-        brand: 'Sony',
-        model: 'ILME-FX3',
-        serialNumber: 'SN-FX3-88401',
-        category: 'Câmeras',
-        description: 'Acompanha XLR Handle, gaiola SmallRig, 2 baterias NP-FZ100 e tampa de sensor.',
-        acquisitionValue: 28500,
-        condition: 'Perfeito',
-        status: 'DISPONÍVEL',
-        location: 'Cofre A1 — Câmeras & Sensores',
-        notes: 'Sensor limpo e firmware v5.0 atualizado.',
-        photos: [],
-        usageCount: 24
-      },
-      {
-        id: 'unit-002',
-        code: 'OLF-CAM-000002',
-        name: 'Sony FX3 Full-Frame Cinema Line (Unidade B)',
-        brand: 'Sony',
-        model: 'ILME-FX3',
-        serialNumber: 'SN-FX3-88402',
-        category: 'Câmeras',
-        description: 'Câmera B-Cam completa com alça XLR e rig de ombro.',
-        acquisitionValue: 28500,
-        condition: 'Perfeito',
-        status: 'RETIRADO',
-        location: 'Em Produção: Longa-Metragem: Horizonte Vermelho',
-        currentHolder: 'Lucas Mendes (Diretor de Fotografia)',
-        currentProject: 'Longa-Metragem: Horizonte Vermelho',
-        checkoutDate: '2026-11-13T08:30:00Z',
-        expectedReturnDate: '2026-11-18T19:00:00Z',
-        notes: 'Saída autorizada para diárias externas.',
-        photos: [],
-        usageCount: 21
-      },
-      {
-        id: 'unit-003',
-        code: 'OLF-CAM-000003',
-        name: 'ARRI ALEXA Mini LF (Unidade Principal)',
-        brand: 'ARRI',
-        model: 'ALEXA Mini LF',
-        serialNumber: 'ARRI-LF-20914',
-        category: 'Câmeras',
-        description: 'Inclui viewfinder MVF-2, placa V-Mount, adaptador PL-to-LPL e case flight Pelican.',
-        acquisitionValue: 345000,
-        condition: 'Perfeito',
-        status: 'DISPONÍVEL',
-        location: 'Cofre A1 — Câmeras & Sensores',
-        notes: 'Revisão oficial ARRI concluída.',
-        photos: [],
-        usageCount: 31
-      },
-      {
-        id: 'unit-004',
-        code: 'OLF-LEN-000001',
-        name: 'Cooke Anamorphic/i 50mm T2.3',
-        brand: 'Cooke',
-        model: 'Anamorphic/i 50mm',
-        serialNumber: 'CK-ANA-5092',
-        category: 'Lentes',
-        description: 'Objetiva anamórfica 50mm com tampas frontal/traseira originais e case rígido.',
-        acquisitionValue: 142000,
-        condition: 'Perfeito',
-        status: 'RETIRADO',
-        location: 'Em Produção: Campanha Institucional Bahia Solar',
-        currentHolder: 'Thiago Nogueira (1st AC)',
-        currentProject: 'Campanha Institucional Bahia Solar',
-        checkoutDate: '2026-11-09T09:00:00Z',
-        expectedReturnDate: '2026-11-12T18:00:00Z',
-        notes: 'Prazo de devolução expirado — cobrar retorno imediato.',
-        photos: [],
-        usageCount: 19
-      },
-      {
-        id: 'unit-005',
-        code: 'OLF-ILU-000001',
-        name: 'Aputure LS 600d Pro Kit Completo',
-        brand: 'Aputure',
-        model: 'LS 600d Pro',
-        serialNumber: 'AP-600D-7731',
-        category: 'Iluminação',
-        description: 'Cabeça LED, caixa de controle, hiper-refletor, cabo Neutrik 7.5m e bolsa rolante.',
-        acquisitionValue: 14800,
-        condition: 'Perfeito',
-        status: 'DISPONÍVEL',
-        location: 'Sala B1 — Iluminação & Grip',
-        notes: 'Testado e conferido.',
-        photos: [],
-        usageCount: 28
-      },
-      {
-        id: 'unit-006',
-        code: 'OLF-AUD-000001',
-        name: 'Sound Devices MixPre-6 II',
-        brand: 'Sound Devices',
-        model: 'MixPre-6 II',
-        serialNumber: 'SD-MP6-4410',
-        category: 'Áudio',
-        description: 'Gravador multipista com sled de baterias Sony L-Series e fonte AC.',
-        acquisitionValue: 9600,
-        condition: 'Em Revisão Técnica',
-        status: 'EM MANUTENÇÃO',
-        location: 'Laboratório de Manutenção Técnica',
-        notes: 'Calibração da entrada XLR Canal 2 e atualização de firmware.',
-        photos: [],
-        usageCount: 16
-      },
-      {
-        id: 'unit-007',
-        code: 'OLF-EST-000001',
-        name: 'DJI Ronin 2 Professional Combo',
-        brand: 'DJI',
-        model: 'Ronin 2',
-        serialNumber: 'DJI-R2-99104',
-        category: 'Estabilizadores',
-        description: 'Inclui anel grip, 2 baterias TB50, hub carregador, controle remoto e case.',
-        acquisitionValue: 48000,
-        condition: 'Perfeito',
-        status: 'DISPONÍVEL',
-        location: 'Sala B1 — Iluminação & Grip',
-        notes: 'Motores balanceados e calibrados.',
-        photos: [],
-        usageCount: 22
-      },
-      {
-        id: 'unit-008',
-        code: 'OLF-ENE-000001',
-        name: 'Kit 4x Baterias V-Mount 150Wh + Carregador Duplo',
-        brand: 'Core SWX',
-        model: 'Hypercore NEO 150',
-        serialNumber: 'CSWX-150-3301',
-        category: 'Energia e baterias',
-        description: '4 células V-Mount 14.8V 150Wh com saída D-Tap/USB e carregador simultâneo.',
-        acquisitionValue: 11200,
-        condition: 'Perfeito',
-        status: 'DISPONÍVEL',
-        location: 'Estante D2 — Energia, Baterias & Cabos',
-        notes: 'Saúde das células em 98%.',
-        photos: [],
-        usageCount: 35
-      }
-    ];
+    const INITIAL_UNITS = [];
 
-    const INITIAL_MOVEMENTS = [
-      {
-        id: 'mov-init-1',
-        type: 'RETIRADA',
-        unitId: 'unit-002',
-        unitCode: 'OLF-CAM-000002',
-        unitName: 'Sony FX3 Full-Frame Cinema Line (Unidade B)',
-        holderName: 'Lucas Mendes (Diretor de Fotografia)',
-        purpose: 'Diária Externa / Captação Principal',
-        project: 'Longa-Metragem: Horizonte Vermelho',
-        timestamp: '2026-11-13T08:30:00Z',
-        expectedReturn: '2026-11-18T19:00:00Z',
-        authorizedBy: 'Cristian Oliveira',
-        conditionOut: 'Perfeito',
-        status: 'EM ABERTO'
-      },
-      {
-        id: 'mov-init-2',
-        type: 'RETIRADA',
-        unitId: 'unit-004',
-        unitCode: 'OLF-LEN-000001',
-        unitName: 'Cooke Anamorphic/i 50mm T2.3',
-        holderName: 'Thiago Nogueira (1st AC)',
-        purpose: 'Filmagens Comerciais',
-        project: 'Campanha Institucional Bahia Solar',
-        timestamp: '2026-11-09T09:00:00Z',
-        expectedReturn: '2026-11-12T18:00:00Z',
-        authorizedBy: 'Mariana Vasconcelos',
-        conditionOut: 'Perfeito',
-        status: 'ATRASADO'
-      },
-      {
-        id: 'mov-init-3',
-        type: 'MANUTENÇÃO',
-        unitId: 'unit-006',
-        unitCode: 'OLF-AUD-000001',
-        unitName: 'Sound Devices MixPre-6 II',
-        holderName: 'Laboratório Técnico Oliv Films',
-        purpose: 'Calibração pré-amplificador XLR Canal 2',
-        project: 'Manutenção Preventiva',
-        timestamp: '2026-11-11T14:00:00Z',
-        authorizedBy: 'Mariana Vasconcelos',
-        conditionOut: 'Bom',
-        status: 'EM MANUTENÇÃO'
-      },
-      {
-        id: 'mov-init-4',
-        type: 'CADASTRO',
-        unitId: 'unit-003',
-        unitCode: 'OLF-CAM-000003',
-        unitName: 'ARRI ALEXA Mini LF (Unidade Principal)',
-        holderName: 'Cofre A1 — Câmeras & Sensores',
-        purpose: 'Tombamento Patrimonial Inicial e Geração de QR Code',
-        project: 'Acervo Permanente Oliv Films',
-        timestamp: '2024-09-20T14:00:00Z',
-        authorizedBy: 'Cristian Oliveira',
-        conditionOut: 'Perfeito',
-        status: 'CONCLUÍDO'
-      }
-    ];
+    const INITIAL_MOVEMENTS = [];
 
     const DEFAULT_SETTINGS = {
       companyName: 'OLIV FILMS',
@@ -434,13 +215,13 @@
       logoFile: 'Oliv_Films_simbolo_4K.jpg',
       logoDataUrl: '',
       qrLinkMode: 'WHATSAPP', // 'WHATSAPP' | 'DIRECTORY' | 'CUSTOM_URL'
-      ownerContactName: 'Cristian Oliveira — Direção Oliv Films',
-      ownerWhatsapp: '5571999999999',
-      ownerPhoneDisplay: '(71) 99999-9999',
-      ownerEmail: 'cristianoliveira727@gmail.com',
-      ownerAddress: 'Central de Equipamentos Oliv Films — Salvador / BA',
+      ownerContactName: '',
+      ownerWhatsapp: '',
+      ownerPhoneDisplay: '',
+      ownerEmail: '',
+      ownerAddress: '',
       lostFoundMessage: 'Este equipamento pertence ao acervo patrimonial da produtora OLIV FILMS. Caso tenha encontrado este item fora de operação, entre em contato imediatamente pelos canais abaixo para devolução.',
-      customDirectoryUrl: 'https://olivfilms.com.br/contato'
+      customDirectoryUrl: ''
     };
 
     // =========================================================================
@@ -708,7 +489,7 @@
 
       const logoSrc = (state && state.companySettings && state.companySettings.logoDataUrl)
         ? state.companySettings.logoDataUrl
-        : 'Oliv_Films_simbolo_4K.jpg';
+        : '/teste/assets/oliv-films-logo.webp';
 
       return `
         <div class="inline-flex items-center justify-center ${dims} ${extraClasses}">
@@ -761,7 +542,7 @@
       models: savedData?.models || JSON.parse(JSON.stringify(INITIAL_MODELS)),
       categories: savedData?.categories || JSON.parse(JSON.stringify(INITIAL_CATEGORIES)),
       locations: savedData?.locations || JSON.parse(JSON.stringify(INITIAL_LOCATIONS)),
-      users: savedData?.users || JSON.parse(JSON.stringify(INITIAL_USERS)),
+      users: [],
       movements: savedData?.movements || JSON.parse(JSON.stringify(INITIAL_MOVEMENTS)),
       companySettings: Object.assign({}, DEFAULT_SETTINGS, savedData?.companySettings || {}),
       inventoryViewMode: 'CARDS',
@@ -775,6 +556,8 @@
       regLocation: INITIAL_LOCATIONS[0],
       regCondition: 'Perfeito',
       regDescription: '',
+      regAccessories: [],
+      regEditUnitId: null,
       regPhotos: [],
       scannedUnitId: null,
       scannerActiveOp: null,
@@ -795,23 +578,351 @@
       showUserMenu: false
     };
 
+    // =========================================================================
+    // 3A. AUTENTICAÇÃO E CAMADA DE DADOS SUPABASE
+    // =========================================================================
+    const supabaseClient = window.olivSupabase || null;
+    let cloudReady = false;
+    let cloudWriteQueue = Promise.resolve();
+    let profileRealtimeChannel = null;
+    let profileStatusPollId = null;
+    let dataRealtimeChannel = null;
+    let realtimeRenderTimer = null;
+    let accessRevocationInProgress = false;
+
+    function scheduleRealtimeRender() {
+      if (state.activeTab === 'register') return;
+      if (realtimeRenderTimer !== null) window.clearTimeout(realtimeRenderTimer);
+      realtimeRenderTimer = window.setTimeout(() => {
+        realtimeRenderTimer = null;
+        if (state.isAuthenticated && state.activeTab !== 'register') renderApp();
+      }, 220);
+    }
+
+    function applyRealtimeRow(table, payload) {
+      const stateKeyByTable = {
+        equipment: 'units',
+        equipment_models: 'models',
+        categories: 'categories',
+        locations: 'locations',
+        movements: 'movements'
+      };
+      const stateKey = stateKeyByTable[table];
+      if (!stateKey) return;
+      const eventType = payload.eventType;
+      const row = eventType === 'DELETE' ? payload.old : payload.new;
+      console.info('[Oliv Films] Evento Realtime recebido:', table, eventType, row?.id ?? '(sem ID)');
+      if (!row || row.id === undefined || row.id === null) return;
+      const rows = Array.isArray(state[stateKey]) ? state[stateKey] : [];
+      const id = String(row.id);
+      if (eventType === 'DELETE') {
+        state[stateKey] = rows.filter(item => String(typeof item === 'string' ? item : item.id) !== id);
+      } else if (row.data !== undefined) {
+        const index = rows.findIndex(item => String(typeof item === 'string' ? item : item.id) === id);
+        if (index >= 0) rows[index] = row.data;
+        else rows.push(row.data);
+        state[stateKey] = rows;
+      }
+      // Eventos remotos nunca devem disparar persistState(): isso poderia
+      // sobrescrever ou excluir registros de outros usuários.
+      // Nunca reconstruir o formulário de cadastro durante o preenchimento.
+      scheduleRealtimeRender();
+    }
+
+    function subscribeToOperationalData() {
+      if (!supabaseClient || dataRealtimeChannel || !state.isAuthenticated) return;
+      const tables = ['equipment', 'equipment_models', 'categories', 'locations', 'movements'];
+      let channel = supabaseClient.channel('oliv-operational-data');
+      for (const table of tables) {
+        channel = channel.on('postgres_changes', {
+          event: '*', schema: 'public', table
+        }, payload => applyRealtimeRow(table, payload));
+      }
+      dataRealtimeChannel = channel.subscribe((status, error) => {
+        console.info('[Oliv Films] Estado da sincronização Realtime:', status);
+        if (error) console.error('[Oliv Films] Falha na sincronização em tempo real:', error);
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[Oliv Films] Sincronização em tempo real indisponível; atualize os dados manualmente se necessário.');
+        }
+      });
+    }
+
+    function stopOperationalDataRealtime() {
+      if (dataRealtimeChannel && supabaseClient) {
+        supabaseClient.removeChannel(dataRealtimeChannel);
+        dataRealtimeChannel = null;
+      }
+    }
+
+    function roleFromDatabase(role) {
+      return ({ admin: 'ADMIN', manager: 'GERENCIADOR', employee: 'OPERADOR' })[role] || 'OPERADOR';
+    }
+    function roleToDatabase(role) {
+      return ({ ADMIN: 'admin', GERENCIADOR: 'manager', OPERADOR: 'employee' })[role] || 'employee';
+    }
+    function profileToUser(profile) {
+      return {
+        id: profile.id, name: profile.full_name || profile.email || 'Usuário',
+        email: profile.email || '', department: profile.department || 'Equipe Oliv Films',
+        role: roleFromDatabase(profile.role), status: profile.status === 'approved' ? 'APROVADO' : profile.status === 'blocked' ? 'BLOQUEADO' : 'PENDENTE',
+        isPrimaryAdmin: profile.role === 'admin'
+      };
+    }
+
+    function stopProfileRealtime() {
+      if (profileStatusPollId !== null) {
+        clearInterval(profileStatusPollId);
+        profileStatusPollId = null;
+      }
+      if (profileRealtimeChannel && supabaseClient) {
+        supabaseClient.removeChannel(profileRealtimeChannel);
+        profileRealtimeChannel = null;
+      }
+    }
+
+    function subscribeToOwnProfile(userId) {
+      stopProfileRealtime();
+      if (!supabaseClient || !userId) return;
+      // Fallback confiável: verifica o próprio perfil a cada 3 segundos.
+      // A consulta respeita RLS e não depende da publicação Realtime.
+      const verifyOwnProfile = async () => {
+        if (!state.isAuthenticated || !state.currentUser || state.currentUser.id !== userId || accessRevocationInProgress) return;
+        try {
+          const { data: profile, error } = await supabaseClient
+            .from('profiles')
+            .select('id,full_name,email,department,role,status')
+            .eq('id', userId)
+            .maybeSingle();
+          if (error) {
+            console.warn('[Oliv Films] Não foi possível verificar o status da conta:', error.message);
+            return;
+          }
+          if (!profile) return;
+          const updatedUser = profileToUser(profile);
+          state.currentUser = updatedUser;
+          if (updatedUser.status !== 'APROVADO') {
+            accessRevocationInProgress = true;
+            await handleLogout('Seu acesso ao Oliv Films foi bloqueado ou suspenso pelo administrador.');
+            accessRevocationInProgress = false;
+            return;
+          }
+          // Não reconstruir a interface durante a verificação periódica:
+          // isso interromperia formulários que o usuário esteja preenchendo.
+        } catch (error) {
+          console.warn('[Oliv Films] Falha temporária ao verificar o status da conta:', error);
+        }
+      };
+      if (profileStatusPollId !== null) clearInterval(profileStatusPollId);
+      profileStatusPollId = setInterval(verifyOwnProfile, 3000);
+
+      profileRealtimeChannel = supabaseClient
+        .channel('oliv-profile-' + userId)
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: 'id=eq.' + userId
+        }, async (payload) => {
+          const profile = payload.new;
+          if (!profile || !state.currentUser || state.currentUser.id !== userId) return;
+          const updatedUser = profileToUser(profile);
+          state.currentUser = updatedUser;
+          if (updatedUser.status !== 'APROVADO' && !accessRevocationInProgress) {
+            accessRevocationInProgress = true;
+            stopLiveScannerCamera();
+            await handleLogout('Seu acesso ao Oliv Films foi bloqueado ou suspenso pelo administrador.');
+            accessRevocationInProgress = false;
+            return;
+          }
+          // Atualiza os dados de acesso em memória sem reconstruir a tela.
+          // A interface permanece estável enquanto formulários estiverem abertos.
+        })
+        .subscribe((status, error) => {
+          if (error) console.error('[Oliv Films] Falha no monitoramento do perfil:', error);
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.warn('[Oliv Films] Monitoramento em tempo real indisponível; a proteção do banco continua ativa.');
+          }
+        });
+    }
+
+    async function loadCloudData(profile) {
+      const loadStartedAt = performance.now();
+      if (!supabaseClient) throw new Error('Conexão Supabase não inicializada.');
+      if (!profile?.id) throw new Error('Perfil da sessão não encontrado.');
+      const tables = [
+        ['equipment', 'units'], ['equipment_models', 'models'],
+        ['categories', 'categories'], ['locations', 'locations'],
+        ['movements', 'movements']
+      ];
+
+      // O perfil já foi consultado no início do login. Reutilizá-lo evita
+      // uma segunda consulta de rede e reduz o tempo até a tela principal.
+      const tableResults = await Promise.all(tables.map(async ([table, key]) => {
+        const startedAt = performance.now();
+        const { data, error } = await supabaseClient.from(table).select('id,data');
+        console.info('[Oliv Films] Tempo de carregamento:', table, Math.round(performance.now() - startedAt) + ' ms');
+        if (error) {
+          console.error('[Oliv Films] Falha ao carregar tabela:', table, {
+            code: error.code, message: error.message, details: error.details, hint: error.hint
+          });
+          throw new Error('Falha ao carregar ' + table + ': ' + error.message);
+        }
+        return [key, (data || []).map(row => row.data)];
+      }));
+      tableResults.forEach(([key, value]) => { state[key] = value; });
+
+      const settingsStartedAt = performance.now();
+      const settingsResult = await supabaseClient.from('company_settings')
+        .select('data').eq('id', 'default').maybeSingle();
+      console.info('[Oliv Films] Tempo de carregamento: company_settings', Math.round(performance.now() - settingsStartedAt) + ' ms');
+      if (settingsResult.error) {
+        console.error('[Oliv Films] Falha ao carregar company_settings:', settingsResult.error);
+        throw new Error('Falha ao carregar configurações: ' + settingsResult.error.message);
+      }
+      state.companySettings = Object.assign({}, DEFAULT_SETTINGS, settingsResult.data?.data || {});
+      state.currentUser = profileToUser(profile);
+      if (state.currentUser.role === 'ADMIN') {
+        const profilesStartedAt = performance.now();
+        const { data: profiles, error: profilesError } = await supabaseClient.from('profiles').select('*').order('created_at');
+        console.info('[Oliv Films] Tempo de carregamento: lista de usuários', Math.round(performance.now() - profilesStartedAt) + ' ms');
+        if (profilesError) {
+          console.error('[Oliv Films] Falha ao carregar lista de perfis:', profilesError);
+          throw new Error('Falha ao carregar usuários: ' + profilesError.message);
+        }
+        state.users = (profiles || []).map(profileToUser);
+      } else {
+        state.users = [state.currentUser];
+      }
+      cloudReady = true;
+      console.info('[Oliv Films] Tempo total dos dados operacionais:', Math.round(performance.now() - loadStartedAt) + ' ms');
+    }
     function persistState() {
       try {
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            units: state.units,
-            models: state.models,
-            categories: state.categories,
-            locations: state.locations,
-            users: state.users,
-            movements: state.movements,
-            companySettings: state.companySettings
-          })
-        );
-      } catch (e) {
-        console.warn('Erro ao salvar estado no localStorage:', e);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          units: state.units, models: state.models, categories: state.categories,
+          locations: state.locations, users: state.users, movements: state.movements,
+          companySettings: state.companySettings
+        }));
+      } catch (e) { console.warn('Erro ao salvar cópia local:', e); }
+
+      if (!cloudReady || !supabaseClient || !state.currentUser) return;
+      cloudWriteQueue = cloudWriteQueue.then(async () => {
+        const canManage = ['ADMIN', 'GERENCIADOR'].includes(state.currentUser.role);
+        const groups = canManage
+          ? [
+              ['equipment', state.units], ['equipment_models', state.models],
+              ['categories', state.categories], ['locations', state.locations],
+              ['movements', state.movements]
+            ]
+          : [['equipment', state.units], ['movements', state.movements]];
+        for (const [table, items] of groups) {
+          const rows = (items || []).map(item => ({ id: typeof item === 'string' ? item : String(item.id), data: item }));
+          if (rows.length) {
+            const { error } = await supabaseClient.from(table).upsert(rows, { onConflict: 'id' });
+            if (error) throw error;
+          }
+          if (canManage) {
+            const keep = rows.map(row => row.id);
+            const { data: existing, error: readError } = await supabaseClient.from(table).select('id');
+            if (readError) throw readError;
+            const stale = (existing || []).map(row => row.id).filter(id => !keep.includes(id));
+            if (stale.length) {
+              const { error } = await supabaseClient.from(table).delete().in('id', stale);
+              if (error) throw error;
+            }
+          }
+        }
+        if (canManage) {
+          const { error: settingsError } = await supabaseClient.from('company_settings')
+            .upsert({ id: 'default', data: state.companySettings }, { onConflict: 'id' });
+          if (settingsError) throw settingsError;
+        }
+      }).catch(error => {
+        console.error('[Oliv Films] Falha ao sincronizar:', error);
+        notify('Não foi possível sincronizar com a nuvem. Seus dados locais foram mantidos.', 'error');
+      });
+    }
+
+    async function finishCloudLogin(sessionUser, source = 'não identificado') {
+      const loginStartedAt = performance.now();
+      console.info('[Oliv Films] Início do carregamento da conta. Origem:', source);
+      try {
+        console.info('[Oliv Films] Login: consultando perfil...');
+        const profileStartedAt = performance.now();
+        const { data: profile, error } = await supabaseClient.from('profiles')
+          .select('*').eq('id', sessionUser.id).single();
+        console.info('[Oliv Films] Tempo de autenticação + perfil:', Math.round(performance.now() - loginStartedAt) + ' ms');
+        console.info('[Oliv Films] Tempo de consulta do perfil:', Math.round(performance.now() - profileStartedAt) + ' ms');
+        if (error) {
+          console.error('[Oliv Films] Falha ao consultar perfil:', error);
+          throw error;
+        }
+        console.info('[Oliv Films] Login: perfil carregado.');
+        const user = profileToUser(profile);
+        if (user.status !== 'APROVADO') {
+          console.warn('[Oliv Films] Encerrando sessão: perfil não aprovado. Status:', user.status, 'Origem:', source);
+          await supabaseClient.auth.signOut();
+          state.currentUser = user;
+          state.isAuthenticated = false;
+          state.authScreenMode = 'PENDING_HOLD';
+          renderApp();
+          return;
+        }
+        state.currentUser = user;
+        console.info('[Oliv Films] Login: carregando dados operacionais...');
+        await loadCloudData(profile);
+        console.info('[Oliv Films] Login: dados carregados.');
+        state.isAuthenticated = true;
+        state.authError = '';
+        subscribeToOwnProfile(sessionUser.id);
+        subscribeToOperationalData();
+        renderApp();
+        console.info('[Oliv Films] Tempo total até abrir o painel:', Math.round(performance.now() - loginStartedAt) + ' ms');
+        notify('Sessão segura iniciada. Dados sincronizados com a nuvem.', 'success');
+      } catch (error) {
+        console.error('[Oliv Films] Erro ao carregar conta/dados:', {
+          message: error?.message, code: error?.code, details: error?.details, hint: error?.hint
+        });
+        console.warn('[Oliv Films] Encerrando sessão após falha no carregamento. Origem:', source);
+        await supabaseClient.auth.signOut();
+        state.isAuthenticated = false;
+        state.authError = error?.message || 'Não foi possível carregar os dados da conta.';
+        renderApp();
       }
+    }
+
+    let loginSubmissionInProgress = false;
+
+    async function submitCloudLogin(email, password) {
+      if (!supabaseClient) throw new Error('Cliente Supabase indisponível. Verifique a configuração.');
+      const authStartedAt = performance.now();
+      console.info('[Oliv Films] Login manual: iniciando autenticação por senha...');
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      console.info('[Oliv Films] Login manual: resposta da autenticação em', Math.round(performance.now() - authStartedAt) + ' ms');
+      if (error) throw error;
+      await finishCloudLogin(data.user, 'login manual');
+    }
+
+    async function submitCloudRegistration(name, email, password, department) {
+      if (!supabaseClient) throw new Error('Cliente Supabase indisponível. Verifique a configuração.');
+      const { error } = await supabaseClient.auth.signUp({
+        email, password,
+        options: { data: { full_name: name, department: department || 'Equipe Externa' } }
+      });
+      if (error) throw error;
+      state.authScreenMode = 'PENDING_HOLD';
+      state.authError = '';
+      renderApp();
+      notify('Solicitação enviada. Confirme seu e-mail, se solicitado, e aguarde aprovação.', 'success');
+    }
+
+    async function requestCloudPasswordReset(email) {
+      if (!supabaseClient) throw new Error('Cliente Supabase indisponível.');
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + window.location.pathname
+      });
+      if (error) throw error;
+      notify('Se o e-mail estiver cadastrado, você receberá instruções de recuperação.', 'success');
     }
 
     // =========================================================================
@@ -881,8 +992,11 @@
       return true;
     }
 
-    function handleLogout(msg = 'Sessão encerrada com segurança.') {
+    async function handleLogout(msg = 'Sessão encerrada com segurança.') {
       stopLiveScannerCamera();
+      stopProfileRealtime();
+      if (supabaseClient) await supabaseClient.auth.signOut();
+      cloudReady = false;
       state.isAuthenticated = false;
       state.currentUser = null;
       state.authScreenMode = 'LOGIN';
@@ -1633,7 +1747,7 @@
                   <div>
                     <div class="h-40 bg-[#080808] relative overflow-hidden">
                       ${unit.photos && unit.photos.length > 0
-                        ? `<img src="${unit.photos[0]}" alt="${escapeHtml(unit.name)}" class="w-full h-full object-cover group-hover:scale-105 transition-transform" />`
+                        ? `<img src="${unit.photos[0]}" alt="${escapeHtml(unit.name)}" class="w-full h-full object-contain p-2" />`
                         : renderPlaceholderHTML(unit.category, unit.code)
                       }
                       <span class="absolute top-2.5 right-2.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -1656,6 +1770,7 @@
                   <div class="px-4 py-2.5 bg-[#080808] border-t border-white/10 text-[11px] text-white/70 truncate">
                     ${unit.status === 'RETIRADO' ? `Com: ${escapeHtml(unit.currentHolder)}` : escapeHtml(unit.location)}
                   </div>
+                  ${isManagerOrAdmin() ? `<div class="px-4 pb-3 flex gap-2" data-stop-card-open="true"><button type="button" data-action="edit-unit" data-id="${unit.id}" class="flex-1 py-2 rounded-lg bg-[#C0C0C0]/15 border border-[#C0C0C0]/30 text-[#C0C0C0] text-[10px] font-bold uppercase">Editar</button><button type="button" data-action="delete-unit" data-id="${unit.id}" class="flex-1 py-2 rounded-lg bg-[#C8102E]/10 border border-[#C8102E]/30 text-[#C8102E] text-[10px] font-bold uppercase">Excluir</button></div>` : ''}
                 </div>
               `).join('')}
             </div>
@@ -1671,6 +1786,7 @@
                       <th class="py-3 px-4">Nº Série</th>
                       <th class="py-3 px-4">Status</th>
                       <th class="py-3 px-4">Localização / Responsável</th>
+                      ${isManagerOrAdmin() ? '<th class="py-3 px-4">Ações</th>' : ''}
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/5">
@@ -1682,6 +1798,7 @@
                         <td class="py-3 px-4 font-mono text-white/60">${escapeHtml(unit.serialNumber)}</td>
                         <td class="py-3 px-4">${escapeHtml(unit.status)}</td>
                         <td class="py-3 px-4 text-white/70">${unit.status === 'RETIRADO' ? escapeHtml(unit.currentHolder) : escapeHtml(unit.location)}</td>
+                        ${isManagerOrAdmin() ? `<td class="py-3 px-4"><div class="flex gap-1.5" data-stop-row-open="true"><button type="button" data-action="edit-unit" data-id="${unit.id}" class="px-2.5 py-1.5 rounded bg-[#C0C0C0]/15 text-[#C0C0C0] font-bold text-[10px]">Editar</button><button type="button" data-action="delete-unit" data-id="${unit.id}" class="px-2.5 py-1.5 rounded bg-[#C8102E]/15 text-[#C8102E] font-bold text-[10px]">Excluir</button></div></td>` : ''}
                       </tr>
                     `).join('')}
                   </tbody>
@@ -1708,7 +1825,8 @@
         `;
       }
 
-      const previewCode = generateUniquePatrimonialCode(state.regCategory);
+      const editingUnit = state.regEditUnitId ? state.units.find((u) => u.id === state.regEditUnitId) : null;
+      const previewCode = editingUnit ? editingUnit.code : generateUniquePatrimonialCode(state.regCategory);
       const qrPayload = buildEquipmentQRPayload(previewCode, state.companySettings);
 
       return `
@@ -1719,8 +1837,8 @@
                 <i data-lucide="plus" class="w-5 h-5 text-[#C8102E]"></i>
               </div>
               <div>
-                <h2 class="text-base font-bold text-white uppercase tracking-wider">Cadastrar Novo Equipamento</h2>
-                <p class="text-xs text-white/50">Preencha os dados objetivos para gerar o código patrimonial e o QR Code</p>
+                <h2 class="text-base font-bold text-white uppercase tracking-wider">${editingUnit ? 'Editar Equipamento' : 'Cadastrar Novo Equipamento'}</h2>
+                <p class="text-xs text-white/50">${editingUnit ? 'Atualize os dados do equipamento mantendo seu código patrimonial e histórico.' : 'Preencha os dados objetivos para gerar o código patrimonial e o QR Code'}</p>
               </div>
             </div>
             <div class="bg-[#080808] border border-[#C0C0C0]/50 px-4 py-2 rounded-xl text-right">
@@ -1790,7 +1908,36 @@
 
                 <div class="sm:col-span-2">
                   <label class="block text-xs uppercase tracking-wider text-white/70 mb-1.5 font-semibold">7. Descrição Simples / Itens Inclusos</label>
-                  <input id="reg-eq-desc" type="text" value="${escapeHtml(state.regDescription)}" placeholder="Ex: Acompanha case rígido, 2 baterias, carregador e cabo XLR" class="w-full bg-[#080808] border border-white/15 focus:border-[#C0C0C0] rounded-xl px-4 py-2.5 text-xs text-white outline-none" />
+                  <input id="reg-eq-desc" type="text" value="${escapeHtml(state.regDescription)}" placeholder="Ex: Acompanha case rígido, baterias e cabos" class="w-full bg-[#080808] border border-white/15 focus:border-[#C0C0C0] rounded-xl px-4 py-2.5 text-xs text-white outline-none" />
+                </div>
+
+                <div class="sm:col-span-2 rounded-xl border border-white/10 bg-[#080808] p-4 space-y-3">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <label class="block text-xs uppercase tracking-wider text-[#C0C0C0] font-semibold">8. Acessórios inclusos</label>
+                      <p class="text-[10px] text-white/40 mt-1">Itens que acompanham este equipamento</p>
+                    </div>
+                    <button type="button" data-action="add-reg-accessory" class="px-3 py-2 rounded-lg border border-[#C0C0C0]/40 text-[#C0C0C0] text-[10px] font-bold uppercase hover:bg-white/5">+ Adicionar item</button>
+                  </div>
+                  ${state.regAccessories.length ? state.regAccessories.map((item, index) => `
+                    <div class="grid grid-cols-12 gap-2 items-start rounded-lg border border-white/10 p-3" data-accessory-row="${index}">
+                      <div class="col-span-6 sm:col-span-5">
+                        <label class="block text-[9px] uppercase text-white/40 mb-1">Acessório</label>
+                        <input type="text" data-accessory-index="${index}" data-accessory-field="name" value="${escapeHtml(item.name || '')}" placeholder="Ex: Bateria extra" class="w-full bg-[#181818] border border-white/10 rounded-lg px-2.5 py-2 text-xs text-white outline-none focus:border-[#C0C0C0]" />
+                      </div>
+                      <div class="col-span-3 sm:col-span-2">
+                        <label class="block text-[9px] uppercase text-white/40 mb-1">Qtd.</label>
+                        <input type="number" min="1" step="1" data-accessory-index="${index}" data-accessory-field="quantity" value="${Math.max(1, Number(item.quantity) || 1)}" class="w-full bg-[#181818] border border-white/10 rounded-lg px-2.5 py-2 text-xs text-white outline-none focus:border-[#C0C0C0]" />
+                      </div>
+                      <div class="col-span-3 sm:col-span-5 flex items-end gap-2">
+                        <div class="min-w-0 flex-1">
+                          <label class="block text-[9px] uppercase text-white/40 mb-1">Observações</label>
+                          <input type="text" data-accessory-index="${index}" data-accessory-field="notes" value="${escapeHtml(item.notes || '')}" placeholder="Modelo, estado..." class="w-full bg-[#181818] border border-white/10 rounded-lg px-2.5 py-2 text-xs text-white outline-none focus:border-[#C0C0C0]" />
+                        </div>
+                        <button type="button" data-action="remove-reg-accessory" data-index="${index}" aria-label="Remover acessório" class="p-2 rounded-lg text-red-400 hover:bg-red-500/10"> <i data-lucide="trash-2" class="w-4 h-4"></i> </button>
+                      </div>
+                    </div>
+                  `).join('') : '<p class="text-[11px] text-white/40 border border-dashed border-white/10 rounded-lg p-3">Nenhum acessório adicionado. Use “Adicionar item” para montar a lista.</p>'}
                 </div>
               </div>
             </div>
@@ -1829,7 +1976,7 @@
               </div>
 
               <button type="submit" class="w-full py-3.5 px-4 rounded-xl bg-[#C8102E] hover:bg-[#a50d26] text-white font-bold text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(200,16,46,0.4)] transition-all cursor-pointer flex items-center justify-center gap-2">
-                <i data-lucide="check-circle-2" class="w-4 h-4"></i> Salvar Equipamento no Estoque
+                <i data-lucide="check-circle-2" class="w-4 h-4"></i> ${editingUnit ? 'Salvar Alterações' : 'Salvar Equipamento no Estoque'}
               </button>
             </div>
           </form>
@@ -2405,6 +2552,7 @@
                       ${usr.status !== 'BLOQUEADO' ? `
                         <button type="button" data-action="change-user-status" data-id="${usr.id}" data-status="BLOQUEADO" class="px-3 py-1.5 rounded-lg bg-[#C8102E]/20 text-[#C8102E] border border-[#C8102E]/40 font-bold text-[11px] uppercase cursor-pointer">Bloquear</button>
                       ` : ''}
+                      <button type="button" data-action="delete-user" data-id="${usr.id}" class="px-3 py-1.5 rounded-lg bg-red-900/30 text-red-300 border border-red-500/40 font-bold text-[11px] uppercase cursor-pointer hover:bg-red-900/60">Excluir</button>
                     </div>
                   </div>
                 ` : ''}
@@ -2579,6 +2727,22 @@
                       <span class="text-white">${unit.status === 'RETIRADO' ? escapeHtml(unit.currentHolder) : escapeHtml(unit.location)}</span>
                     </div>
                     <p class="text-white/70 bg-[#080808] p-3 rounded-lg border border-white/10">${escapeHtml(unit.description)}</p>
+                    <div class="bg-[#080808] border border-white/10 rounded-xl p-3 space-y-2">
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-[#C0C0C0]">Acessórios inclusos</span>
+                        <span class="text-[10px] text-white/40">${(Array.isArray(unit.accessories) ? unit.accessories : []).length} tipos de itens</span>
+                      </div>
+                      ${(Array.isArray(unit.accessories) ? unit.accessories : []).length ? `
+                        <div class="space-y-2">
+                          ${(Array.isArray(unit.accessories) ? unit.accessories : []).map(item => `
+                            <div class="flex items-start justify-between gap-3 text-xs border-t border-white/5 pt-2">
+                              <div class="min-w-0"><span class="text-white font-semibold">${escapeHtml(item.name || 'Acessório')}</span>${item.notes ? `<p class="text-[10px] text-white/45 mt-0.5">${escapeHtml(item.notes)}</p>` : ''}</div>
+                              <span class="shrink-0 text-[#C0C0C0] font-mono">Qtd. ${Math.max(1, Number(item.quantity) || 1)}</span>
+                            </div>
+                          `).join('')}
+                        </div>
+                      ` : '<p class="text-[11px] text-white/40">Nenhum acessório informado para este equipamento.</p>'}
+                    </div>
 
                     <div class="p-2.5 rounded-lg bg-[#080808] border border-emerald-500/30 flex items-center justify-between gap-2">
                       <div class="min-w-0">
@@ -2745,8 +2909,10 @@
               </div>
 
               <div class="bg-[#080808] border border-white/15 rounded-xl p-4 text-left flex items-center gap-4">
-                <div class="w-14 h-14 rounded-lg bg-[#181818] border border-white/10 flex items-center justify-center shrink-0">
-                  <i data-lucide="camera" class="w-6 h-6 text-[#C0C0C0]"></i>
+                <div class="w-24 h-24 rounded-lg bg-[#181818] border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
+                  ${unit.photos && unit.photos.length > 0
+                    ? `<img src="${unit.photos[0]}" alt="Foto de ${escapeHtml(unit.name)}" class="w-full h-full object-contain p-1" />`
+                    : '<i data-lucide="camera" class="w-6 h-6 text-[#C0C0C0]"></i>'}
                 </div>
                 <div class="min-w-0">
                   <span class="px-2 py-0.5 rounded bg-[#C0C0C0] text-black font-mono text-[11px] font-black">${escapeHtml(unit.code)}</span>
@@ -2787,9 +2953,17 @@
     // =========================================================================
     // 8. RENDERIZADOR PRINCIPAL DA INTERFACE
     // =========================================================================
+    function dismissBootScreen() {
+      const bootScreen = document.getElementById('oliv-boot-screen');
+      if (!bootScreen || bootScreen.classList.contains('is-leaving')) return;
+      bootScreen.classList.add('is-leaving');
+      window.setTimeout(() => bootScreen.remove(), 320);
+    }
+
     function renderApp() {
       const root = document.getElementById('app-root');
       if (!root) return;
+      dismissBootScreen();
 
       if (!state.isAuthenticated || !state.currentUser || state.currentUser.status !== 'APROVADO') {
         stopLiveScannerCamera();
@@ -3210,7 +3384,7 @@
     // =========================================================================
     // 10. DELEGAÇÃO DE EVENTOS GLOBAIS (CLIQUES, FORMULÁRIOS, TECLA ESC E LEITOR USB)
     // =========================================================================
-    document.addEventListener('click', (e) => {
+    document.addEventListener('click', async (e) => {
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
       const action = btn.getAttribute('data-action');
@@ -3222,11 +3396,20 @@
           renderApp();
           break;
 
-        case 'recover-send':
-          notify('Instruções de recuperação enviadas para o seu e-mail.', 'info');
-          state.authScreenMode = 'LOGIN';
-          renderApp();
+        case 'recover-send': {
+          const recoveryInput = document.querySelector('input[placeholder="E-mail cadastrado"]');
+          const recoveryEmail = (recoveryInput?.value || state.authEmail || '').trim().toLowerCase();
+          if (!recoveryEmail) {
+            state.authError = 'Informe o e-mail cadastrado.';
+            renderApp();
+            break;
+          }
+          requestCloudPasswordReset(recoveryEmail).catch(error => {
+            state.authError = error.message || 'Falha ao solicitar recuperação.';
+            renderApp();
+          });
           break;
+        }
 
         case 'switch-user':
           handleSwitchUser();
@@ -3247,7 +3430,25 @@
           renderApp();
           break;
 
+        case 'edit-unit': {
+          if (!checkPermission(['ADMIN', 'GERENCIADOR'])) break;
+          const unit=state.units.find(u=>u.id===btn.getAttribute('data-id')); if(!unit) break;
+          state.regEditUnitId=unit.id; state.regName=unit.name||''; state.regBrandModel=`${unit.brand||''} ${unit.model||''}`.trim();
+          state.regCategory=unit.category||state.categories[0]?.name||'Câmeras'; state.regSerialNumber=unit.serialNumber||'';
+          state.regLocation=unit.location||state.locations[0]; state.regCondition=unit.condition||'Perfeito'; state.regDescription=unit.description||'';
+          state.regAccessories=Array.isArray(unit.accessories)?unit.accessories.map(item=>({...item})):[]; state.regPhotos=Array.isArray(unit.photos)?[...unit.photos]:[];
+          state.selectedUnitDetailId=null; state.activeTab='register'; renderApp(); break;
+        }
+        case 'delete-unit': {
+          if (!checkPermission(['ADMIN', 'GERENCIADOR'])) break;
+          const unit=state.units.find(u=>u.id===btn.getAttribute('data-id')); if(!unit) break;
+          if(unit.status==='RETIRADO'){notify('Devolva o equipamento ao estoque antes de excluí-lo.','error');break;}
+          if(!window.confirm(`Tem certeza que deseja excluir ${unit.code} — ${unit.name}? O histórico de movimentações será preservado.`)) break;
+          state.units=state.units.filter(u=>u.id!==unit.id); if(state.scannedUnitId===unit.id)state.scannedUnitId=null;
+          if(state.selectedUnitDetailId===unit.id)state.selectedUnitDetailId=null; persistState(); renderApp(); notify(`Equipamento ${unit.code} excluído do inventário.`,'success'); break;
+        }
         case 'open-unit-detail':
+          if (e.target.closest('[data-stop-card-open], [data-stop-row-open]')) break;
           state.selectedUnitDetailId = btn.getAttribute('data-id');
           renderApp();
           break;
@@ -3340,6 +3541,20 @@
           state.regCondition = btn.getAttribute('data-cond');
           renderApp();
           break;
+
+        case 'add-reg-accessory':
+          state.regAccessories.push({ name: '', quantity: 1, notes: '' });
+          renderApp();
+          break;
+
+        case 'remove-reg-accessory': {
+          const accessoryIndex = Number(btn.getAttribute('data-index'));
+          if (Number.isInteger(accessoryIndex) && accessoryIndex >= 0 && accessoryIndex < state.regAccessories.length) {
+            state.regAccessories.splice(accessoryIndex, 1);
+            renderApp();
+          }
+          break;
+        }
 
         case 'clear-reg-photo':
           state.regPhotos = [];
@@ -3449,12 +3664,40 @@
           renderApp();
           break;
 
+        case 'delete-user': {
+          if (!isAdmin() || !supabaseClient) break;
+          const usr = state.users.find((u) => u.id === btn.getAttribute('data-id'));
+          if (!usr || usr.isPrimaryAdmin || usr.id === state.currentUser?.id) {
+            notify('Este usuário não pode ser excluído por aqui.', 'error');
+            break;
+          }
+          const confirmed = window.confirm('Tem certeza que deseja excluir definitivamente o usuário ' + usr.name + ' (' + usr.email + ')? Esta ação removerá também o acesso de login e não poderá ser desfeita.');
+          if (!confirmed) break;
+          btn.disabled = true;
+          btn.textContent = 'Excluindo...';
+          const { error } = await supabaseClient.rpc('admin_delete_user', { p_user_id: usr.id });
+          if (error) {
+            console.error('[Oliv Films] Falha ao excluir usuário:', error);
+            notify('Não foi possível excluir o usuário: ' + error.message, 'error');
+            btn.disabled = false;
+            btn.textContent = 'Excluir';
+            break;
+          }
+          state.users = state.users.filter((u) => u.id !== usr.id);
+          renderApp();
+          notify('Usuário ' + usr.name + ' excluído com sucesso.', 'success');
+          break;
+        }
+
         case 'change-user-status': {
-          if (!isAdmin()) break;
+          if (!isAdmin() || !supabaseClient) break;
           const usr = state.users.find((u) => u.id === btn.getAttribute('data-id'));
           if (usr && !usr.isPrimaryAdmin) {
-            usr.status = btn.getAttribute('data-status');
-            persistState();
+            const nextStatus = btn.getAttribute('data-status');
+            const dbStatus = nextStatus === 'APROVADO' ? 'approved' : nextStatus === 'BLOQUEADO' ? 'blocked' : 'pending';
+            const { error } = await supabaseClient.from('profiles').update({ status: dbStatus }).eq('id', usr.id);
+            if (error) { notify('Não foi possível alterar o status: ' + error.message, 'error'); break; }
+            usr.status = nextStatus;
             renderApp();
             notify(`Status de ${usr.name} atualizado para ${usr.status}.`, 'success');
           }
@@ -3542,9 +3785,11 @@
         renderApp();
       } else if (target.getAttribute('data-action') === 'change-user-role') {
         const usr = state.users.find((u) => u.id === target.getAttribute('data-id'));
-        if (usr && !usr.isPrimaryAdmin) {
+        if (usr && !usr.isPrimaryAdmin && isAdmin() && supabaseClient) {
+          const { error } = await supabaseClient.from('profiles')
+            .update({ role: roleToDatabase(target.value) }).eq('id', usr.id);
+          if (error) { notify('Não foi possível alterar o perfil: ' + error.message, 'error'); return; }
           usr.role = target.value;
-          persistState();
           renderApp();
           notify(`Permissão de ${usr.name} alterada para ${usr.role}.`, 'success');
         }
@@ -3573,6 +3818,12 @@
         state.regSerialNumber = target.value;
       } else if (target.id === 'reg-eq-desc') {
         state.regDescription = target.value;
+      } else if (target.hasAttribute('data-accessory-index')) {
+        const index = Number(target.getAttribute('data-accessory-index'));
+        const field = target.getAttribute('data-accessory-field');
+        if (Number.isInteger(index) && state.regAccessories[index] && ['name', 'quantity', 'notes'].includes(field)) {
+          state.regAccessories[index][field] = field === 'quantity' ? Math.max(1, Number(target.value) || 1) : target.value;
+        }
       } else if (target.id === 'hist-search-input') {
         state.historySearch = target.value;
         renderApp();
@@ -3585,84 +3836,44 @@
     });
 
     // Submissão de todos os formulários
-    document.addEventListener('submit', (e) => {
+    document.addEventListener('submit', async (e) => {
       e.preventDefault();
       const form = e.target;
 
       if (form.id === 'login-form') {
+        if (loginSubmissionInProgress) return;
         const email = document.getElementById('login-email').value.trim().toLowerCase();
-        const pass = document.getElementById('login-password').value.trim();
+        const pass = document.getElementById('login-password').value;
+        const submitButton = form.querySelector('button[type="submit"]');
+        loginSubmissionInProgress = true;
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.textContent = 'Entrando... aguarde';
+          submitButton.classList.add('opacity-60', 'cursor-wait');
+        }
         state.authEmail = email;
-        state.authPassword = pass;
-
-        if (email === 'cristianoliveira727@gmail.com' && pass === '1234') {
-          const master = state.users.find((u) => u.email.toLowerCase() === email) || INITIAL_USERS[0];
-          state.currentUser = master;
-          state.isAuthenticated = true;
-          state.authError = '';
+        state.authPassword = '';
+        try {
+          await submitCloudLogin(email, pass);
+        } catch (error) {
+          state.authError = error.message || 'E-mail ou senha inválidos.';
           renderApp();
-          notify(`Bem-vindo, ${master.name} (Administrador Master)!`, 'success');
-          return;
+        } finally {
+          loginSubmissionInProgress = false;
         }
-
-        const found = state.users.find((u) => u.email.toLowerCase() === email);
-        if (!found) {
-          state.authError = 'E-mail não encontrado. Solicite seu cadastro abaixo.';
-          renderApp();
-          return;
-        }
-        if ((found.password || '1234') !== pass) {
-          state.authError = 'Senha incorreta para este usuário.';
-          renderApp();
-          return;
-        }
-        if (found.status === 'PENDENTE') {
-          state.currentUser = found;
-          state.authScreenMode = 'PENDING_HOLD';
-          renderApp();
-          return;
-        }
-        if (found.status !== 'APROVADO') {
-          state.authError = `Acesso bloqueado: status ${found.status}.`;
-          renderApp();
-          return;
-        }
-
-        state.currentUser = found;
-        state.isAuthenticated = true;
-        state.authError = '';
-        renderApp();
-        notify(`Sessão iniciada como ${found.name} (${found.role}).`, 'success');
       }
 
       else if (form.id === 'register-request-form') {
         const name = document.getElementById('reg-req-name').value.trim();
         const email = document.getElementById('reg-req-email').value.trim().toLowerCase();
-        const password = document.getElementById('reg-req-pass').value.trim();
+        const password = document.getElementById('reg-req-pass').value;
         const dept = document.getElementById('reg-req-dept').value.trim();
-
-        if (state.users.some((u) => u.email.toLowerCase() === email)) {
-          state.authError = 'Este e-mail já possui cadastro ou solicitação.';
+        try {
+          await submitCloudRegistration(name, email, password, dept);
+        } catch (error) {
+          state.authError = error.message || 'Não foi possível enviar o cadastro.';
           renderApp();
-          return;
         }
-
-        const newUser = {
-          id: `usr-${Date.now()}`,
-          name,
-          email,
-          password,
-          department: dept || 'Equipe Externa',
-          role: 'OPERADOR',
-          status: 'PENDENTE',
-          isPrimaryAdmin: false,
-          createdAt: new Date().toISOString()
-        };
-        state.users.push(newUser);
-        persistState();
-        state.currentUser = newUser;
-        state.authScreenMode = 'PENDING_HOLD';
-        renderApp();
       }
 
       else if (form.id === 'manual-scan-form') {
@@ -3752,63 +3963,18 @@
 
       else if (form.id === 'register-equipment-form') {
         if (!checkPermission(['ADMIN', 'GERENCIADOR'])) return;
-        const uniqueCode = generateUniquePatrimonialCode(state.regCategory);
-        const finalSerial = state.regSerialNumber.trim()
-          ? state.regSerialNumber.trim().toUpperCase()
-          : `SN-${uniqueCode.split('-').slice(1).join('-')}`;
-
-        if (state.units.some((u) => u.serialNumber.toLowerCase() === finalSerial.toLowerCase())) {
-          notify('Este Número de Série já está cadastrado!', 'error');
-          return;
-        }
-
-        const cleanBM = state.regBrandModel.trim() || state.regName.trim();
-        const parts = cleanBM.split(' ');
-        const brand = parts[0] || 'Oliv Films';
-        const model = parts.slice(1).join(' ') || cleanBM;
-
-        const newUnit = {
-          id: `unit-${Date.now()}`,
-          code: uniqueCode,
-          name: state.regName.trim(),
-          brand,
-          model,
-          serialNumber: finalSerial,
-          category: state.regCategory,
-          description: state.regDescription.trim() || 'Equipamento operacional do acervo Oliv Films.',
-          acquisitionValue: 0,
-          condition: state.regCondition,
-          status: 'DISPONÍVEL',
-          location: state.regLocation,
-          notes: '',
-          photos: [...state.regPhotos],
-          usageCount: 0
-        };
-
-        state.units.push(newUnit);
-        state.movements.unshift({
-          id: `mov-reg-${Date.now()}`,
-          type: 'CADASTRO',
-          unitId: newUnit.id,
-          unitCode: newUnit.code,
-          unitName: newUnit.name,
-          holderName: newUnit.location,
-          purpose: 'Cadastro de Equipamento e Geração de QR Code',
-          project: 'Acervo Oliv Films',
-          timestamp: new Date().toISOString(),
-          authorizedBy: state.currentUser.name,
-          status: 'CONCLUÍDO'
-        });
-
-        state.regName = '';
-        state.regBrandModel = '';
-        state.regSerialNumber = '';
-        state.regDescription = '';
-        state.regPhotos = [];
-        state.selectedUnitDetailId = newUnit.id;
-        persistState();
-        renderApp();
-        notify(`Equipamento ${uniqueCode} cadastrado com sucesso!`, 'success');
+        const editing=state.regEditUnitId?state.units.find(u=>u.id===state.regEditUnitId):null;
+        if(state.regEditUnitId&&!editing){notify('Equipamento não encontrado para edição.','error');return;}
+        const uniqueCode=editing?editing.code:generateUniquePatrimonialCode(state.regCategory);
+        const finalSerial=state.regSerialNumber.trim()?state.regSerialNumber.trim().toUpperCase():`SN-${uniqueCode.split('-').slice(1).join('-')}`;
+        if(state.units.some(u=>u.id!==editing?.id&&(u.serialNumber||'').toLowerCase()===finalSerial.toLowerCase())){notify('Este Número de Série já está cadastrado!','error');return;}
+        const cleanBM=state.regBrandModel.trim()||state.regName.trim(); const parts=cleanBM.split(/\s+/).filter(Boolean);
+        const fields={name:state.regName.trim(),brand:parts[0]||'Oliv Films',model:parts.slice(1).join(' '),serialNumber:finalSerial,category:state.regCategory,description:state.regDescription.trim()||'Equipamento operacional do acervo Oliv Films.',accessories:state.regAccessories.filter(item=>item.name.trim()).map(item=>({name:item.name.trim(),quantity:Math.max(1,Number(item.quantity)||1),notes:(item.notes||'').trim()})),condition:state.regCondition,location:state.regLocation,photos:[...state.regPhotos]};
+        let savedUnit;
+        if(editing){Object.assign(editing,fields);savedUnit=editing;state.movements.unshift({id:`mov-edit-${Date.now()}`,type:'EDIÇÃO',unitId:editing.id,unitCode:editing.code,unitName:editing.name,holderName:editing.status==='RETIRADO'?(editing.currentHolder||''):editing.location,purpose:'Atualização dos dados cadastrais do equipamento',project:'Acervo Oliv Films',timestamp:new Date().toISOString(),authorizedBy:state.currentUser.name,status:'CONCLUÍDO'});}
+        else{savedUnit={id:`unit-${Date.now()}`,code:uniqueCode,...fields,acquisitionValue:0,status:'DISPONÍVEL',notes:'',usageCount:0};state.units.push(savedUnit);state.movements.unshift({id:`mov-reg-${Date.now()}`,type:'CADASTRO',unitId:savedUnit.id,unitCode:savedUnit.code,unitName:savedUnit.name,holderName:savedUnit.location,purpose:'Cadastro de Equipamento e Geração de QR Code',project:'Acervo Oliv Films',timestamp:new Date().toISOString(),authorizedBy:state.currentUser.name,status:'CONCLUÍDO'});}
+        state.regEditUnitId=null;state.regName='';state.regBrandModel='';state.regSerialNumber='';state.regDescription='';state.regAccessories=[];state.regPhotos=[];state.selectedUnitDetailId=savedUnit.id;persistState();renderApp();
+        notify(editing?`Equipamento ${uniqueCode} atualizado com sucesso!`:`Equipamento ${uniqueCode} cadastrado com sucesso!`,'success');
       }
 
       else if (form.id === 'create-category-form') {
@@ -3963,18 +4129,59 @@
     });
 
     // Inicialização e verificação de parâmetros de Achados e Perdidos (?achado=OLF-CAM-000001)
-    window.onload = function () {
+    window.onload = async function () {
       const params = new URLSearchParams(window.location.search);
       const achado = params.get('achado') || params.get('eqp');
-      if (achado) {
-        const found = findUnitByScannedValue(achado);
-        state.lostFoundUnit = found || {
-          code: achado.toUpperCase(),
-          name: 'Equipamento Cinematográfico Oliv Films',
-          serialNumber: 'Identificado via QR Code'
-        };
+      const fallbackFoundUnit = achado ? {
+        code: achado.toUpperCase(),
+        name: 'Equipamento Cinematográfico Oliv Films',
+        serialNumber: 'Identificado via QR Code'
+      } : null;
+
+      if (!supabaseClient) {
+        state.lostFoundUnit = fallbackFoundUnit;
+        state.authError = 'Conexão com o Supabase não carregou. Atualize a página ou confira supabase-config.js.';
+        renderApp();
+        return;
       }
-      renderApp();
+
+      console.info('[Oliv Films] Inicialização: verificando sessão salva...');
+      const sessionStartedAt = performance.now();
+      const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
+      console.info('[Oliv Films] Inicialização: verificação de sessão em', Math.round(performance.now() - sessionStartedAt) + ' ms', '| sessão encontrada:', Boolean(sessionData?.session?.user));
+      if (sessionError) console.error('[Oliv Films] Erro ao recuperar sessão salva:', sessionError);
+
+      if (sessionData?.session?.user) {
+        await finishCloudLogin(sessionData.session.user, 'restauração automática');
+        if (achado) state.lostFoundUnit = findUnitByScannedValue(achado) || fallbackFoundUnit;
+      } else if (achado) {
+        // Visitantes sem login consultam somente os campos públicos do item identificado.
+        try {
+          const { data, error } = await supabaseClient.rpc('lookup_equipment_for_found_item', { p_code: achado });
+          if (error) throw error;
+          if (data?.contact && typeof data.contact === 'object') {
+            state.companySettings = Object.assign({}, state.companySettings, data.contact);
+          }
+          state.lostFoundUnit = data ? Object.assign({}, data, { contact: undefined }) : fallbackFoundUnit;
+        } catch (error) {
+          console.error('[Oliv Films] Não foi possível consultar o item pelo QR Code:', error);
+          state.lostFoundUnit = fallbackFoundUnit;
+        }
+        renderApp();
+      } else {
+        renderApp();
+      }
+
+      supabaseClient.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
+          stopProfileRealtime();
+          stopOperationalDataRealtime();
+          cloudReady = false;
+          state.isAuthenticated = false;
+          state.currentUser = null;
+          renderApp();
+        }
+      });
     };
   </script>
 </body>
