@@ -841,8 +841,9 @@
       });
     }
 
-    async function finishCloudLogin(sessionUser) {
+    async function finishCloudLogin(sessionUser, source = 'não identificado') {
       const loginStartedAt = performance.now();
+      console.info('[Oliv Films] Início do carregamento da conta. Origem:', source);
       try {
         console.info('[Oliv Films] Login: consultando perfil...');
         const profileStartedAt = performance.now();
@@ -857,6 +858,7 @@
         console.info('[Oliv Films] Login: perfil carregado.');
         const user = profileToUser(profile);
         if (user.status !== 'APROVADO') {
+          console.warn('[Oliv Films] Encerrando sessão: perfil não aprovado. Status:', user.status, 'Origem:', source);
           await supabaseClient.auth.signOut();
           state.currentUser = user;
           state.isAuthenticated = false;
@@ -879,6 +881,7 @@
         console.error('[Oliv Films] Erro ao carregar conta/dados:', {
           message: error?.message, code: error?.code, details: error?.details, hint: error?.hint
         });
+        console.warn('[Oliv Films] Encerrando sessão após falha no carregamento. Origem:', source);
         await supabaseClient.auth.signOut();
         state.isAuthenticated = false;
         state.authError = error?.message || 'Não foi possível carregar os dados da conta.';
@@ -890,9 +893,12 @@
 
     async function submitCloudLogin(email, password) {
       if (!supabaseClient) throw new Error('Cliente Supabase indisponível. Verifique a configuração.');
+      const authStartedAt = performance.now();
+      console.info('[Oliv Films] Login manual: iniciando autenticação por senha...');
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      console.info('[Oliv Films] Login manual: resposta da autenticação em', Math.round(performance.now() - authStartedAt) + ' ms');
       if (error) throw error;
-      await finishCloudLogin(data.user);
+      await finishCloudLogin(data.user, 'login manual');
     }
 
     async function submitCloudRegistration(name, email, password, department) {
@@ -4067,9 +4073,12 @@
         renderApp();
         return;
       }
+      console.info('[Oliv Films] Inicialização: verificando sessão salva...');
+      const sessionStartedAt = performance.now();
       const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
-      if (sessionError) console.error(sessionError);
-      if (sessionData?.session?.user) await finishCloudLogin(sessionData.session.user);
+      console.info('[Oliv Films] Inicialização: verificação de sessão em', Math.round(performance.now() - sessionStartedAt) + ' ms', '| sessão encontrada:', Boolean(sessionData?.session?.user));
+      if (sessionError) console.error('[Oliv Films] Erro ao recuperar sessão salva:', sessionError);
+      if (sessionData?.session?.user) await finishCloudLogin(sessionData.session.user, 'restauração automática');
       else renderApp();
       supabaseClient.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT') {
