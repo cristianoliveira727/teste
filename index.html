@@ -610,7 +610,8 @@
         else rows.push(row.data);
         state[stateKey] = rows;
       }
-      persistState();
+      // Eventos remotos nunca devem disparar persistState(): isso poderia
+      // sobrescrever ou excluir registros de outros usuários.
       // Nunca reconstruir o formulário de cadastro durante o preenchimento.
       if (state.activeTab !== 'register') renderApp();
     }
