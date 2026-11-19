@@ -584,7 +584,60 @@
     let cloudWriteQueue = Promise.resolve();
     let profileRealtimeChannel = null;
     let profileStatusPollId = null;
+    let dataRealtimeChannel = null;
     let accessRevocationInProgress = false;
+
+    function applyRealtimeRow(table, payload) {
+      const stateKeyByTable = {
+        equipment: 'units',
+        equipment_models: 'models',
+        categories: 'categories',
+        locations: 'locations',
+        movements: 'movements'
+      };
+      const stateKey = stateKeyByTable[table];
+      if (!stateKey) return;
+      const eventType = payload.eventType;
+      const row = eventType === 'DELETE' ? payload.old : payload.new;
+      if (!row || row.id === undefined || row.id === null) return;
+      const rows = Array.isArray(state[stateKey]) ? state[stateKey] : [];
+      const id = String(row.id);
+      if (eventType === 'DELETE') {
+        state[stateKey] = rows.filter(item => String(typeof item === 'string' ? item : item.id) !== id);
+      } else if (row.data !== undefined) {
+        const index = rows.findIndex(item => String(typeof item === 'string' ? item : item.id) === id);
+        if (index >= 0) rows[index] = row.data;
+        else rows.push(row.data);
+        state[stateKey] = rows;
+      }
+      persistState();
+      // Nunca reconstruir o formulário de cadastro durante o preenchimento.
+      if (state.activeTab !== 'register') renderApp();
+    }
+
+    function subscribeToOperationalData() {
+      if (!supabaseClient || dataRealtimeChannel || !state.isAuthenticated) return;
+      const tables = ['equipment', 'equipment_models', 'categories', 'locations', 'movements'];
+      let channel = supabaseClient.channel('oliv-operational-data');
+      for (const table of tables) {
+        channel = channel.on('postgres_changes', {
+          event: '*', schema: 'public', table
+        }, payload => applyRealtimeRow(table, payload));
+      }
+      dataRealtimeChannel = channel.subscribe((status, error) => {
+        if (error) console.error('[Oliv Films] Falha na sincronização em tempo real:', error);
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[Oliv Films] Sincronização em tempo real indisponível; atualize os dados manualmente se necessário.');
+        }
+      });
+    }
+
+    function stopOperationalDataRealtime() {
+      if (dataRealtimeChannel && supabaseClient) {
+        supabaseClient.removeChannel(dataRealtimeChannel);
+        dataRealtimeChannel = null;
+      }
+    }
 
     function roleFromDatabase(role) {
       return ({ admin: 'ADMIN', manager: 'GERENCIADOR', employee: 'OPERADOR' })[role] || 'OPERADOR';
@@ -774,6 +827,7 @@
         state.isAuthenticated = true;
         state.authError = '';
         subscribeToOwnProfile(sessionUser.id);
+        subscribeToOperationalData();
         renderApp();
         notify('Sessão segura iniciada. Dados sincronizados com a nuvem.', 'success');
       } catch (error) {
@@ -3961,6 +4015,7 @@
       supabaseClient.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT') {
           stopProfileRealtime();
+          stopOperationalDataRealtime();
           cloudReady = false;
           state.isAuthenticated = false;
           state.currentUser = null;
