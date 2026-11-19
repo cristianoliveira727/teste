@@ -556,6 +556,7 @@
       regLocation: INITIAL_LOCATIONS[0],
       regCondition: 'Perfeito',
       regDescription: '',
+      regAccessories: [],
       regPhotos: [],
       scannedUnitId: null,
       scannerActiveOp: null,
@@ -1902,7 +1903,36 @@
 
                 <div class="sm:col-span-2">
                   <label class="block text-xs uppercase tracking-wider text-white/70 mb-1.5 font-semibold">7. Descrição Simples / Itens Inclusos</label>
-                  <input id="reg-eq-desc" type="text" value="${escapeHtml(state.regDescription)}" placeholder="Ex: Acompanha case rígido, 2 baterias, carregador e cabo XLR" class="w-full bg-[#080808] border border-white/15 focus:border-[#C0C0C0] rounded-xl px-4 py-2.5 text-xs text-white outline-none" />
+                  <input id="reg-eq-desc" type="text" value="${escapeHtml(state.regDescription)}" placeholder="Ex: Acompanha case rígido, baterias e cabos" class="w-full bg-[#080808] border border-white/15 focus:border-[#C0C0C0] rounded-xl px-4 py-2.5 text-xs text-white outline-none" />
+                </div>
+
+                <div class="sm:col-span-2 rounded-xl border border-white/10 bg-[#080808] p-4 space-y-3">
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <label class="block text-xs uppercase tracking-wider text-[#C0C0C0] font-semibold">8. Acessórios inclusos</label>
+                      <p class="text-[10px] text-white/40 mt-1">Itens que acompanham este equipamento</p>
+                    </div>
+                    <button type="button" data-action="add-reg-accessory" class="px-3 py-2 rounded-lg border border-[#C0C0C0]/40 text-[#C0C0C0] text-[10px] font-bold uppercase hover:bg-white/5">+ Adicionar item</button>
+                  </div>
+                  ${state.regAccessories.length ? state.regAccessories.map((item, index) => `
+                    <div class="grid grid-cols-12 gap-2 items-start rounded-lg border border-white/10 p-3" data-accessory-row="${index}">
+                      <div class="col-span-6 sm:col-span-5">
+                        <label class="block text-[9px] uppercase text-white/40 mb-1">Acessório</label>
+                        <input type="text" data-accessory-index="${index}" data-accessory-field="name" value="${escapeHtml(item.name || '')}" placeholder="Ex: Bateria extra" class="w-full bg-[#181818] border border-white/10 rounded-lg px-2.5 py-2 text-xs text-white outline-none focus:border-[#C0C0C0]" />
+                      </div>
+                      <div class="col-span-3 sm:col-span-2">
+                        <label class="block text-[9px] uppercase text-white/40 mb-1">Qtd.</label>
+                        <input type="number" min="1" step="1" data-accessory-index="${index}" data-accessory-field="quantity" value="${Math.max(1, Number(item.quantity) || 1)}" class="w-full bg-[#181818] border border-white/10 rounded-lg px-2.5 py-2 text-xs text-white outline-none focus:border-[#C0C0C0]" />
+                      </div>
+                      <div class="col-span-3 sm:col-span-5 flex items-end gap-2">
+                        <div class="min-w-0 flex-1">
+                          <label class="block text-[9px] uppercase text-white/40 mb-1">Observações</label>
+                          <input type="text" data-accessory-index="${index}" data-accessory-field="notes" value="${escapeHtml(item.notes || '')}" placeholder="Modelo, estado..." class="w-full bg-[#181818] border border-white/10 rounded-lg px-2.5 py-2 text-xs text-white outline-none focus:border-[#C0C0C0]" />
+                        </div>
+                        <button type="button" data-action="remove-reg-accessory" data-index="${index}" aria-label="Remover acessório" class="p-2 rounded-lg text-red-400 hover:bg-red-500/10"> <i data-lucide="trash-2" class="w-4 h-4"></i> </button>
+                      </div>
+                    </div>
+                  `).join('') : '<p class="text-[11px] text-white/40 border border-dashed border-white/10 rounded-lg p-3">Nenhum acessório adicionado. Use “Adicionar item” para montar a lista.</p>'}
                 </div>
               </div>
             </div>
@@ -2691,6 +2721,22 @@
                       <span class="text-white">${unit.status === 'RETIRADO' ? escapeHtml(unit.currentHolder) : escapeHtml(unit.location)}</span>
                     </div>
                     <p class="text-white/70 bg-[#080808] p-3 rounded-lg border border-white/10">${escapeHtml(unit.description)}</p>
+                    <div class="bg-[#080808] border border-white/10 rounded-xl p-3 space-y-2">
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-[#C0C0C0]">Acessórios inclusos</span>
+                        <span class="text-[10px] text-white/40">${(Array.isArray(unit.accessories) ? unit.accessories : []).length} tipos de itens</span>
+                      </div>
+                      ${(Array.isArray(unit.accessories) ? unit.accessories : []).length ? `
+                        <div class="space-y-2">
+                          ${(Array.isArray(unit.accessories) ? unit.accessories : []).map(item => `
+                            <div class="flex items-start justify-between gap-3 text-xs border-t border-white/5 pt-2">
+                              <div class="min-w-0"><span class="text-white font-semibold">${escapeHtml(item.name || 'Acessório')}</span>${item.notes ? `<p class="text-[10px] text-white/45 mt-0.5">${escapeHtml(item.notes)}</p>` : ''}</div>
+                              <span class="shrink-0 text-[#C0C0C0] font-mono">Qtd. ${Math.max(1, Number(item.quantity) || 1)}</span>
+                            </div>
+                          `).join('')}
+                        </div>
+                      ` : '<p class="text-[11px] text-white/40">Nenhum acessório informado para este equipamento.</p>'}
+                    </div>
 
                     <div class="p-2.5 rounded-lg bg-[#080808] border border-emerald-500/30 flex items-center justify-between gap-2">
                       <div class="min-w-0">
@@ -3470,6 +3516,20 @@
           renderApp();
           break;
 
+        case 'add-reg-accessory':
+          state.regAccessories.push({ name: '', quantity: 1, notes: '' });
+          renderApp();
+          break;
+
+        case 'remove-reg-accessory': {
+          const accessoryIndex = Number(btn.getAttribute('data-index'));
+          if (Number.isInteger(accessoryIndex) && accessoryIndex >= 0 && accessoryIndex < state.regAccessories.length) {
+            state.regAccessories.splice(accessoryIndex, 1);
+            renderApp();
+          }
+          break;
+        }
+
         case 'clear-reg-photo':
           state.regPhotos = [];
           renderApp();
@@ -3707,6 +3767,12 @@
         state.regSerialNumber = target.value;
       } else if (target.id === 'reg-eq-desc') {
         state.regDescription = target.value;
+      } else if (target.hasAttribute('data-accessory-index')) {
+        const index = Number(target.getAttribute('data-accessory-index'));
+        const field = target.getAttribute('data-accessory-field');
+        if (Number.isInteger(index) && state.regAccessories[index] && ['name', 'quantity', 'notes'].includes(field)) {
+          state.regAccessories[index][field] = field === 'quantity' ? Math.max(1, Number(target.value) || 1) : target.value;
+        }
       } else if (target.id === 'hist-search-input') {
         state.historySearch = target.value;
         renderApp();
@@ -3870,6 +3936,11 @@
           serialNumber: finalSerial,
           category: state.regCategory,
           description: state.regDescription.trim() || 'Equipamento operacional do acervo Oliv Films.',
+          accessories: state.regAccessories.filter(item => item.name.trim()).map(item => ({
+            name: item.name.trim(),
+            quantity: Math.max(1, Number(item.quantity) || 1),
+            notes: (item.notes || '').trim()
+          })),
           acquisitionValue: 0,
           condition: state.regCondition,
           status: 'DISPONÍVEL',
@@ -3898,6 +3969,7 @@
         state.regBrandModel = '';
         state.regSerialNumber = '';
         state.regDescription = '';
+        state.regAccessories = [];
         state.regPhotos = [];
         state.selectedUnitDetailId = newUnit.id;
         persistState();
