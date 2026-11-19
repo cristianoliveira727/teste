@@ -4159,7 +4159,10 @@
         try {
           const { data, error } = await supabaseClient.rpc('lookup_equipment_for_found_item', { p_code: achado });
           if (error) throw error;
-          state.lostFoundUnit = data || fallbackFoundUnit;
+          if (data?.contact && typeof data.contact === 'object') {
+            state.companySettings = Object.assign({}, state.companySettings, data.contact);
+          }
+          state.lostFoundUnit = data ? Object.assign({}, data, { contact: undefined }) : fallbackFoundUnit;
         } catch (error) {
           console.error('[Oliv Films] Não foi possível consultar o item pelo QR Code:', error);
           state.lostFoundUnit = fallbackFoundUnit;
