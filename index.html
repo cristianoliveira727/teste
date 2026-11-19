@@ -585,7 +585,17 @@
     let profileRealtimeChannel = null;
     let profileStatusPollId = null;
     let dataRealtimeChannel = null;
+    let realtimeRenderTimer = null;
     let accessRevocationInProgress = false;
+
+    function scheduleRealtimeRender() {
+      if (state.activeTab === 'register') return;
+      if (realtimeRenderTimer !== null) window.clearTimeout(realtimeRenderTimer);
+      realtimeRenderTimer = window.setTimeout(() => {
+        realtimeRenderTimer = null;
+        if (state.isAuthenticated && state.activeTab !== 'register') renderApp();
+      }, 220);
+    }
 
     function applyRealtimeRow(table, payload) {
       const stateKeyByTable = {
@@ -614,7 +624,7 @@
       // Eventos remotos nunca devem disparar persistState(): isso poderia
       // sobrescrever ou excluir registros de outros usuários.
       // Nunca reconstruir o formulário de cadastro durante o preenchimento.
-      if (state.activeTab !== 'register') renderApp();
+      scheduleRealtimeRender();
     }
 
     function subscribeToOperationalData() {
