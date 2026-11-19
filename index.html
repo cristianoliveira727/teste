@@ -3596,11 +3596,14 @@
           break;
 
         case 'change-user-status': {
-          if (!isAdmin()) break;
+          if (!isAdmin() || !supabaseClient) break;
           const usr = state.users.find((u) => u.id === btn.getAttribute('data-id'));
           if (usr && !usr.isPrimaryAdmin) {
-            usr.status = btn.getAttribute('data-status');
-            persistState();
+            const nextStatus = btn.getAttribute('data-status');
+            const dbStatus = nextStatus === 'APROVADO' ? 'approved' : nextStatus === 'BLOQUEADO' ? 'blocked' : 'pending';
+            const { error } = await supabaseClient.from('profiles').update({ status: dbStatus }).eq('id', usr.id);
+            if (error) { notify('Não foi possível alterar o status: ' + error.message, 'error'); break; }
+            usr.status = nextStatus;
             renderApp();
             notify(`Status de ${usr.name} atualizado para ${usr.status}.`, 'success');
           }
@@ -3688,9 +3691,11 @@
         renderApp();
       } else if (target.getAttribute('data-action') === 'change-user-role') {
         const usr = state.users.find((u) => u.id === target.getAttribute('data-id'));
-        if (usr && !usr.isPrimaryAdmin) {
+        if (usr && !usr.isPrimaryAdmin && isAdmin() && supabaseClient) {
+          const { error } = await supabaseClient.from('profiles')
+            .update({ role: roleToDatabase(target.value) }).eq('id', usr.id);
+          if (error) { notify('Não foi possível alterar o perfil: ' + error.message, 'error'); return; }
           usr.role = target.value;
-          persistState();
           renderApp();
           notify(`Permissão de ${usr.name} alterada para ${usr.role}.`, 'success');
         }
@@ -3731,7 +3736,7 @@
     });
 
     // Submissão de todos os formulários
-    document.addEventListener('submit', (e) => {
+    document.addEventListener('submit', async (e) => {
       e.preventDefault();
       const form = e.target;
 
