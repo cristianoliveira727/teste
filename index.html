@@ -583,6 +583,7 @@
     let cloudReady = false;
     let cloudWriteQueue = Promise.resolve();
     let profileRealtimeChannel = null;
+    let profileStatusPollId = null;
     let accessRevocationInProgress = false;
 
     function roleFromDatabase(role) {
@@ -601,6 +602,10 @@
     }
 
     function stopProfileRealtime() {
+      if (profileStatusPollId !== null) {
+        clearInterval(profileStatusPollId);
+        profileStatusPollId = null;
+      }
       if (profileRealtimeChannel && supabaseClient) {
         supabaseClient.removeChannel(profileRealtimeChannel);
         profileRealtimeChannel = null;
@@ -610,6 +615,37 @@
     function subscribeToOwnProfile(userId) {
       stopProfileRealtime();
       if (!supabaseClient || !userId) return;
+      // Fallback confiável: verifica o próprio perfil a cada 3 segundos.
+      // A consulta respeita RLS e não depende da publicação Realtime.
+      const verifyOwnProfile = async () => {
+        if (!state.isAuthenticated || !state.currentUser || state.currentUser.id !== userId || accessRevocationInProgress) return;
+        try {
+          const { data: profile, error } = await supabaseClient
+            .from('profiles')
+            .select('id,full_name,email,department,role,status')
+            .eq('id', userId)
+            .maybeSingle();
+          if (error) {
+            console.warn('[Oliv Films] Não foi possível verificar o status da conta:', error.message);
+            return;
+          }
+          if (!profile) return;
+          const updatedUser = profileToUser(profile);
+          state.currentUser = updatedUser;
+          if (updatedUser.status !== 'APROVADO') {
+            accessRevocationInProgress = true;
+            await handleLogout('Seu acesso ao Oliv Films foi bloqueado ou suspenso pelo administrador.');
+            accessRevocationInProgress = false;
+            return;
+          }
+          if (state.isAuthenticated) renderApp();
+        } catch (error) {
+          console.warn('[Oliv Films] Falha temporária ao verificar o status da conta:', error);
+        }
+      };
+      if (profileStatusPollId !== null) clearInterval(profileStatusPollId);
+      profileStatusPollId = setInterval(verifyOwnProfile, 3000);
+
       profileRealtimeChannel = supabaseClient
         .channel('oliv-profile-' + userId)
         .on('postgres_changes', {
