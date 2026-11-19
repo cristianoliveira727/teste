@@ -68,6 +68,76 @@
       animation: laserScan 2s ease-in-out infinite;
     }
 
+    /* Tela de inicialização — Oliv Films */
+    #oliv-boot-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: #080808;
+      color: #F5F5F5;
+      opacity: 1;
+      visibility: visible;
+      transition: opacity .28s ease, visibility .28s ease;
+    }
+    #oliv-boot-screen.is-leaving {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .oliv-boot-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: min(100%, 360px);
+      padding: 34px 28px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 20px;
+      background: #181818;
+      box-shadow: 0 24px 80px rgba(0,0,0,.38);
+      text-align: center;
+    }
+    .oliv-boot-logo {
+      width: auto;
+      height: 104px;
+      max-width: 210px;
+      object-fit: contain;
+      margin-bottom: 22px;
+    }
+    .oliv-boot-fallback {
+      display: none;
+      margin-bottom: 22px;
+      color: #fff;
+      font-size: 27px;
+      font-weight: 900;
+      letter-spacing: .18em;
+    }
+    .oliv-boot-spinner {
+      width: 30px;
+      height: 30px;
+      margin-top: 26px;
+      border: 3px solid rgba(255,255,255,.14);
+      border-top-color: #C8102E;
+      border-right-color: #C8102E;
+      border-radius: 50%;
+      animation: olivBootSpin .85s linear infinite;
+    }
+    .oliv-boot-status {
+      margin-top: 13px;
+      color: #C0C0C0;
+      font: 700 10px/1.5 'JetBrains Mono', monospace;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    @keyframes olivBootSpin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      #oliv-boot-screen { transition: none; }
+      .oliv-boot-spinner { animation-duration: 2.5s; }
+    }
+
     /* Impressão limpa de etiquetas e relatórios */
     @media print {
       body * {
@@ -94,6 +164,22 @@
   </style>
 </head>
 <body class="min-h-screen bg-[#080808] text-[#F5F5F5] selection:bg-[#C8102E] selection:text-white">
+
+  <!-- Tela inicial exibida enquanto a sessão e os dados são verificados -->
+  <div id="oliv-boot-screen" role="status" aria-live="polite" aria-label="Carregando sistema Oliv Films">
+    <div class="oliv-boot-card">
+      <img
+        class="oliv-boot-logo"
+        src="Oliv_Films_simbolo_4K.jpg"
+        alt="Oliv Films"
+        onerror="this.style.display='none'; document.getElementById('oliv-boot-fallback').style.display='block';"
+      />
+      <div id="oliv-boot-fallback" class="oliv-boot-fallback">OLIV FILMS</div>
+      <div class="text-[10px] font-bold tracking-[.28em] text-[#C0C0C0] uppercase">Controle Patrimonial Audiovisual</div>
+      <div class="oliv-boot-spinner" aria-hidden="true"></div>
+      <div class="oliv-boot-status">Inicializando sistema patrimonial...</div>
+    </div>
+  </div>
 
   <!-- CONTAINER RAIZ DA APLICAÇÃO -->
   <div id="app-root"></div>
@@ -2619,9 +2705,17 @@
     // =========================================================================
     // 8. RENDERIZADOR PRINCIPAL DA INTERFACE
     // =========================================================================
+    function dismissBootScreen() {
+      const bootScreen = document.getElementById('oliv-boot-screen');
+      if (!bootScreen || bootScreen.classList.contains('is-leaving')) return;
+      bootScreen.classList.add('is-leaving');
+      window.setTimeout(() => bootScreen.remove(), 320);
+    }
+
     function renderApp() {
       const root = document.getElementById('app-root');
       if (!root) return;
+      dismissBootScreen();
 
       if (!state.isAuthenticated || !state.currentUser || state.currentUser.status !== 'APROVADO') {
         stopLiveScannerCamera();
