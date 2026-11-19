@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Oliv Films — Migração segura do inventário</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./supabase-config.js"></script>
+  <style>
+    :root{color-scheme:dark;--bg:#080808;--panel:#181818;--red:#c8102e;--silver:#c0c0c0;--white:#f5f5f5}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--white);font:15px Inter,system-ui,sans-serif;padding:28px 16px}
+    main{max-width:760px;margin:0 auto}.brand{color:var(--silver);letter-spacing:.22em;font-size:11px;font-weight:800}
+    h1{font-size:clamp(24px,5vw,34px);margin:10px 0}.muted{color:#aaa;line-height:1.6}
+    .panel{background:var(--panel);border:1px solid #ffffff20;border-radius:18px;padding:22px;margin:18px 0}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+    .metric{background:#080808;border:1px solid #ffffff18;border-radius:12px;padding:14px}.metric strong{display:block;font-size:24px}
+    label{display:block;font-size:12px;color:var(--silver);margin:14px 0 6px}
+    input{width:100%;background:#080808;color:white;border:1px solid #ffffff30;border-radius:10px;padding:13px;font-size:14px}
+    button{border:0;border-radius:10px;padding:13px 16px;font-weight:800;cursor:pointer;margin:10px 8px 0 0}
+    .primary{background:var(--red);color:white}.secondary{background:var(--silver);color:#080808}
+    button:disabled{opacity:.45;cursor:not-allowed}.notice{padding:13px;border-radius:10px;background:#ffffff0a;border:1px solid #ffffff20;white-space:pre-wrap;line-height:1.5}
+    .warn{border-color:#b98932;color:#f1d59b}.success{border-color:#27865a;color:#9de0ba}.error{border-color:var(--red);color:#ffb7c1}
+    code{color:#ddd;overflow-wrap:anywhere}ol{padding-left:20px;line-height:1.7}
+  </style>
+</head>
+<body>
+<main>
+  <div class="brand">OLIV FILMS · CONTROLE PATRIMONIAL</div>
+  <h1>Migração segura do inventário</h1>
+  <p class="muted">Esta ferramenta lê a cópia local do sistema antigo neste navegador e transfere os registros para o Supabase. Ela não apaga o armazenamento local, não importa senhas antigas e não substitui registros diferentes já existentes.</p>
+
+  <section class="panel">
+    <h2>1. Backup local encontrado</h2>
+    <p id="backupStatus" class="muted">Verificando armazenamento deste navegador…</p>
+    <div id="metrics" class="grid"></div>
+    <button id="downloadBackup" class="secondary" disabled>Baixar backup JSON</button>
+  </section>
+
+  <section class="panel">
+    <h2>2. Conta administradora</h2>
+    <p class="muted">Entre com o e-mail e a senha da conta que você criou no Supabase e promoveu para administradora.</p>
+    <label for="email">E-mail</label>
+    <input id="email" type="email" autocomplete="username" placeholder="seu e-mail">
+    <label for="password">Senha</label>
+    <input id="password" type="password" autocomplete="current-password" placeholder="Senha do Supabase Auth">
+    <button id="login" class="secondary">Validar acesso administrativo</button>
+    <p id="authStatus" class="notice" role="status">Ainda não autenticado.</p>
+  </section>
+
+  <section class="panel">
+    <h2>3. Importar para a nuvem</h2>
+    <p class="muted">A importação verifica cada identificador. Registros iguais já existentes são ignorados; se encontrar o mesmo ID com conteúdo diferente, interrompe sem sobrescrever. Se a operação for interrompida, você pode executá-la novamente.</p>
+    <button id="import" class="primary" disabled>Importar inventário para o Supabase</button>
+    <p id="importStatus" class="notice" role="status">Aguardando backup e validação da conta.</p>
+  </section>
+
+  <section class="panel">
+    <h2>O que será migrado</h2>
+    <ol>
+      <li>Equipamentos, incluindo fotos que já estejam incorporadas nos registros.</li>
+      <li>Modelos, categorias e localizações.</li>
+      <li>Histórico de movimentações.</li>
+      <li>Configurações da empresa e identidade visual.</li>
+    </ol>
+    <p class="muted"><strong>Contas de usuários antigas não são importadas.</strong> Crie cada funcionário pelo cadastro do novo sistema; as senhas antigas não são reutilizadas.</p>
+  </section>
+</main>
+<script>
+(() => {
+  const STORAGE_KEY = 'oliv_films_patrimonio_v2';
+  const $ = id => document.getElementById(id);
+  let legacy = null;
+  let client = window.olivSupabase || null;
+  let adminSession = false;
+  const groups = [
+    ['units','equipment','Equipamentos'],
+    ['models','equipment_models','Modelos'],
+    ['categories','categories','Categorias'],
+    ['locations','locations','Localizações'],
+    ['movements','movements','Movimentações']
+  ];
+
+  function setNotice(id, message, kind='') {
+    $(id).textContent = message;
+    $(id).className = 'notice ' + kind;
+  }
+  function stable(value) {
+    if (Array.isArray(value)) return '[' + value.map(stable).join(',') + ']';
+    if (value && typeof value === 'object') {
+      return '{' + Object.keys(value).sort().map(k => JSON.stringify(k)+':'+stable(value[k])).join(',') + '}';
+    }
+    return JSON.stringify(value);
+  }
+  function inspectBackup() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) throw new Error('Não encontrei o backup do sistema antigo neste domínio/navegador. Abra a versão antiga do Oliv Films neste mesmo navegador e confirme que os dados ainda aparecem.');
+      legacy = JSON.parse(raw);
+      for (const key of ['units','models','categories','locations','movements']) {
+        if (!Array.isArray(legacy[key])) legacy[key] = [];
+      }
+      if (!legacy.companySettings || typeof legacy.companySettings !== 'object') legacy.companySettings = {};
+      $('backupStatus').textContent = 'Backup local identificado. Confira as quantidades abaixo e baixe uma cópia antes de importar.';
+      $('metrics').innerHTML = '';
+      for (const [key,,label] of groups) {
+        const div = document.createElement('div');
+        div.className = 'metric';
+        const count = document.createElement('strong');
+        count.textContent = legacy[key].length;
+        const caption = document.createElement('span');
+        caption.className = 'muted';
+        caption.textContent = label;
+        div.append(count,caption);
+        $('metrics').append(div);
+      }
+      $('downloadBackup').disabled = false;
+      updateImportButton();
+    } catch (error) {
+      $('backupStatus').textContent = error.message;
+      $('backupStatus').className = 'notice error';
+      $('downloadBackup').disabled = true;
+    }
+  }
+  function updateImportButton() {
+    $('import').disabled = !(legacy && adminSession);
+  }
+  $('downloadBackup').addEventListener('click', () => {
+    if (!legacy) return;
+    const blob = new Blob([JSON.stringify(legacy,null,2)],{type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'OLIV_FILMS_BACKUP_ANTES_DA_MIGRACAO.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotice('importStatus','Backup JSON baixado. Guarde esse arquivo em local seguro.','success');
+  });
+  $('login').addEventListener('click', async () => {
+    if (!client) { setNotice('authStatus','Cliente Supabase não carregou. Confira supabase-config.js.','error'); return; }
+    $('login').disabled = true;
+    try {
+      const {data,error} = await client.auth.signInWithPassword({
+        email:$('email').value.trim(),
+        password:$('password').value
+      });
+      if (error) throw error;
+      const {data:profile,error:profileError} = await client.from('profiles')
+        .select('role,status').eq('id',data.user.id).single();
+      if (profileError) throw profileError;
+      if (profile.role !== 'admin' || profile.status !== 'approved') {
+        await client.auth.signOut();
+        throw new Error('A conta autenticada não está aprovada como administradora.');
+      }
+      adminSession = true;
+      $('password').value = '';
+      setNotice('authStatus','Acesso administrativo validado. Você pode iniciar a importação.','success');
+      updateImportButton();
+    } catch (error) {
+      adminSession = false;
+      setNotice('authStatus',error.message || 'Falha ao validar conta.','error');
+      updateImportButton();
+    } finally { $('login').disabled = false; }
+  });
+
+  async function importGroup(sourceKey, table) {
+    const items = legacy[sourceKey] || [];
+    const rows = items.map(item => {
+      const id = typeof item === 'string' ? item : item && item.id != null ? String(item.id) : '';
+      if (!id) throw new Error('Registro sem identificador em ' + sourceKey + '. Nenhum dado desta tabela foi importado.');
+      return {id,data:item};
+    });
+    if (!rows.length) return '0 registros';
+    const {data:existing,error} = await client.from(table).select('id,data');
+    if (error) throw error;
+    const map = new Map((existing || []).map(row => [String(row.id),row.data]));
+    const pending = [];
+    for (const row of rows) {
+      if (map.has(row.id)) {
+        if (stable(map.get(row.id)) !== stable(row.data)) {
+          throw new Error('Conflito em ' + table + ': o ID "' + row.id + '" já existe com conteúdo diferente. Nada foi sobrescrito nessa tabela.');
+        }
+      } else pending.push(row);
+    }
+    for (let i=0;i<pending.length;i+=100) {
+      const batch = pending.slice(i,i+100);
+      const {error:insertError} = await client.from(table).insert(batch);
+      if (insertError) throw insertError;
+    }
+    return (rows.length-pending.length) + ' já existentes; ' + pending.length + ' importados';
+  }
+  $('import').addEventListener('click', async () => {
+    if (!legacy || !adminSession || !client) return;
+    $('import').disabled = true;
+    setNotice('importStatus','Iniciando verificações…');
+    try {
+      const {data:userData,error:userError} = await client.auth.getUser();
+      if (userError || !userData.user) throw new Error('Sua sessão expirou. Valide novamente a conta administradora.');
+      const {data:profile,error:profileError} = await client.from('profiles')
+        .select('role,status').eq('id',userData.user.id).single();
+      if (profileError) throw profileError;
+      if (profile.role !== 'admin' || profile.status !== 'approved') throw new Error('A conta não tem permissão administrativa.');
+
+      const report = [];
+      for (const [key,table,label] of groups) {
+        setNotice('importStatus','Verificando e importando: ' + label + '…');
+        report.push(label + ': ' + await importGroup(key,table));
+      }
+
+      setNotice('importStatus','Verificando configurações…');
+      const {data:settings,error:settingsError} = await client.from('company_settings')
+        .select('id,data').eq('id','default').maybeSingle();
+      if (settingsError) throw settingsError;
+      if (settings) {
+        if (stable(settings.data) !== stable(legacy.companySettings)) {
+          throw new Error('As configurações "default" já existem com conteúdo diferente. Não foram sobrescritas.');
+        }
+        report.push('Configurações: já existentes, sem alteração');
+      } else {
+        const {error:insertSettingsError} = await client.from('company_settings')
+          .insert({id:'default',data:legacy.companySettings});
+        if (insertSettingsError) throw insertSettingsError;
+        report.push('Configurações: importadas');
+      }
+      setNotice('importStatus','Migração concluída.\n' + report.join('\n') + '\n\nOs dados locais continuam preservados. Entre no sistema principal e confira o inventário.','success');
+    } catch (error) {
+      setNotice('importStatus','Importação interrompida: ' + (error.message || 'erro desconhecido') + '\nVocê pode corrigir a causa e executar novamente; registros já importados e idênticos serão reconhecidos.','error');
+    } finally { updateImportButton(); }
+  });
+
+  if (!client) setNotice('authStatus','Configuração Supabase indisponível. Confirme que supabase-config.js está nesta mesma pasta.','error');
+  inspectBackup();
+})();
+</script>
+</body>
+</html>
