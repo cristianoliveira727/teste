@@ -106,284 +106,17 @@
     // =========================================================================
     // 1. DADOS INICIAIS DO ACERVO PATRIMONIAL & USUÁRIOS OLIV FILMS
     // =========================================================================
-    const INITIAL_CATEGORIES = [
-      { id: 'cat-1', name: 'Câmeras', prefix: 'CAM', subcategories: ['Cinema Digital', 'Full-Frame', 'Super 35', 'Alta Velocidade'] },
-      { id: 'cat-2', name: 'Lentes', prefix: 'LEN', subcategories: ['Anamórficas PL', 'Prime Cinema', 'Zoom Cinema', 'Full-Frame E/RF'] },
-      { id: 'cat-3', name: 'Iluminação', prefix: 'ILU', subcategories: ['LED COB Alta Potência', 'Painéis RGBWW', 'Tubos Pixel', 'Modificadores & Softbox'] },
-      { id: 'cat-4', name: 'Áudio', prefix: 'AUD', subcategories: ['Gravadores Multipista', 'Microfones Shotgun', 'Sistemas Sem Fio', 'Boom & Acessórios'] },
-      { id: 'cat-5', name: 'Estabilizadores', prefix: 'EST', subcategories: ['Gimbal 3 Eixos', 'Steadicam & Coletes', 'Easyrig'] },
-      { id: 'cat-6', name: 'Tripés e suportes', prefix: 'TRI', subcategories: ['Cabeças Fluidas', 'Tripés Fibra de Carbono', 'Hi-Hat & Sliders', 'Grip & C-Stands'] },
-      { id: 'cat-7', name: 'Monitores', prefix: 'MON', subcategories: ['Monitores de Câmera 5"/7"', 'Monitores de Direção 17"+', 'Transmissores Sem Fio'] },
-      { id: 'cat-8', name: 'Acessórios', prefix: 'ACE', subcategories: ['Matte Box & Filtros ND', 'Follow Focus Wireless', 'Cages & Baseplates'] },
-      { id: 'cat-9', name: 'Cabos e conexões', prefix: 'CAB', subcategories: ['SDI 12G Blindado', 'Timecode & Genlock', 'Alimentação D-Tap / Lemo'] },
-      { id: 'cat-10', name: 'Armazenamento', prefix: 'ARM', subcategories: ['Cartões CFexpress Type A/B', 'Módulos Codex / SSD', 'Leitores de Alta Velocidade'] },
-      { id: 'cat-11', name: 'Energia e baterias', prefix: 'ENE', subcategories: ['Baterias V-Mount', 'Baterias Gold Mount', 'Estações de Carga Rápida'] },
-      { id: 'cat-12', name: 'Computadores e periféricos', prefix: 'COM', subcategories: ['Estações DIT', 'MacBook Pro M-Series', 'Calibradores de Cor'] },
-      { id: 'cat-13', name: 'Equipamentos de produção', prefix: 'PRD', subcategories: ['Rádios Comunicadores', 'Claquete Digital Timecode', 'Carrinhos de Set'] },
-      { id: 'cat-14', name: 'Outros', prefix: 'OUT', subcategories: ['Cases Pelican', 'Ferramentas de Set', 'Geral'] }
-    ];
+    const INITIAL_CATEGORIES = [];
 
-    const INITIAL_LOCATIONS = [
-      'Cofre A1 — Câmeras & Sensores',
-      'Cofre A2 — Óptica & Lentes Cinema',
-      'Sala B1 — Iluminação & Grip',
-      'Estante C1 — Áudio & Captação',
-      'Estante D2 — Energia, Baterias & Cabos',
-      'Laboratório de Manutenção Técnica'
-    ];
+    const INITIAL_LOCATIONS = [];
 
     // Usuários e credenciais são gerenciados exclusivamente pelo Supabase Auth.
 
-    const INITIAL_MODELS = [
-      {
-        id: 'mod-fx3',
-        name: 'Sony FX3 Full-Frame Cinema Line',
-        brand: 'Sony',
-        model: 'ILME-FX3',
-        category: 'Câmeras',
-        description: 'Câmera Cinema Full-Frame 4K 120fps com alça superior XLR, sensor Exmor R e S-Cinetone.'
-      },
-      {
-        id: 'mod-alexa',
-        name: 'ARRI ALEXA Mini LF',
-        brand: 'ARRI',
-        model: 'ALEXA Mini LF',
-        category: 'Câmeras',
-        description: 'Corpo de câmera cinema Large Format com montagem LPL, filtros FSND internos e ARRIRAW.'
-      },
-      {
-        id: 'mod-cooke',
-        name: 'Cooke Anamorphic/i 50mm T2.3',
-        brand: 'Cooke',
-        model: 'Anamorphic/i 50mm',
-        category: 'Lentes',
-        description: 'Objetiva Prime Anamórfica 2x montagem PL com tecnologia /i metadata.'
-      },
-      {
-        id: 'mod-aputure',
-        name: 'Aputure LS 600d Pro',
-        brand: 'Aputure',
-        model: 'LS 600d Pro',
-        category: 'Iluminação',
-        description: 'Refletor LED Daylight 5600K de 600W com controle Sidus Link e DMX512.'
-      },
-      {
-        id: 'mod-sounddev',
-        name: 'Sound Devices MixPre-6 II',
-        brand: 'Sound Devices',
-        model: 'MixPre-6 II',
-        category: 'Áudio',
-        description: 'Gravador e mixer de áudio 32-bit float com pré-amplificadores Kashmir e Timecode.'
-      }
-    ];
+    const INITIAL_MODELS = [];
 
-    const INITIAL_UNITS = [
-      {
-        id: 'unit-001',
-        code: 'OLF-CAM-000001',
-        name: 'Sony FX3 Full-Frame Cinema Line (Unidade A)',
-        brand: 'Sony',
-        model: 'ILME-FX3',
-        serialNumber: 'SN-FX3-88401',
-        category: 'Câmeras',
-        description: 'Acompanha XLR Handle, gaiola SmallRig, 2 baterias NP-FZ100 e tampa de sensor.',
-        acquisitionValue: 28500,
-        condition: 'Perfeito',
-        status: 'DISPONÍVEL',
-        location: 'Cofre A1 — Câmeras & Sensores',
-        notes: 'Sensor limpo e firmware v5.0 atualizado.',
-        photos: [],
-        usageCount: 24
-      },
-      {
-        id: 'unit-002',
-        code: 'OLF-CAM-000002',
-        name: 'Sony FX3 Full-Frame Cinema Line (Unidade B)',
-        brand: 'Sony',
-        model: 'ILME-FX3',
-        serialNumber: 'SN-FX3-88402',
-        category: 'Câmeras',
-        description: 'Câmera B-Cam completa com alça XLR e rig de ombro.',
-        acquisitionValue: 28500,
-        condition: 'Perfeito',
-        status: 'RETIRADO',
-        location: 'Em Produção: Longa-Metragem: Horizonte Vermelho',
-        currentHolder: 'Lucas Mendes (Diretor de Fotografia)',
-        currentProject: 'Longa-Metragem: Horizonte Vermelho',
-        checkoutDate: '2026-11-13T08:30:00Z',
-        expectedReturnDate: '2026-11-18T19:00:00Z',
-        notes: 'Saída autorizada para diárias externas.',
-        photos: [],
-        usageCount: 21
-      },
-      {
-        id: 'unit-003',
-        code: 'OLF-CAM-000003',
-        name: 'ARRI ALEXA Mini LF (Unidade Principal)',
-        brand: 'ARRI',
-        model: 'ALEXA Mini LF',
-        serialNumber: 'ARRI-LF-20914',
-        category: 'Câmeras',
-        description: 'Inclui viewfinder MVF-2, placa V-Mount, adaptador PL-to-LPL e case flight Pelican.',
-        acquisitionValue: 345000,
-        condition: 'Perfeito',
-        status: 'DISPONÍVEL',
-        location: 'Cofre A1 — Câmeras & Sensores',
-        notes: 'Revisão oficial ARRI concluída.',
-        photos: [],
-        usageCount: 31
-      },
-      {
-        id: 'unit-004',
-        code: 'OLF-LEN-000001',
-        name: 'Cooke Anamorphic/i 50mm T2.3',
-        brand: 'Cooke',
-        model: 'Anamorphic/i 50mm',
-        serialNumber: 'CK-ANA-5092',
-        category: 'Lentes',
-        description: 'Objetiva anamórfica 50mm com tampas frontal/traseira originais e case rígido.',
-        acquisitionValue: 142000,
-        condition: 'Perfeito',
-        status: 'RETIRADO',
-        location: 'Em Produção: Campanha Institucional Bahia Solar',
-        currentHolder: 'Thiago Nogueira (1st AC)',
-        currentProject: 'Campanha Institucional Bahia Solar',
-        checkoutDate: '2026-11-09T09:00:00Z',
-        expectedReturnDate: '2026-11-12T18:00:00Z',
-        notes: 'Prazo de devolução expirado — cobrar retorno imediato.',
-        photos: [],
-        usageCount: 19
-      },
-      {
-        id: 'unit-005',
-        code: 'OLF-ILU-000001',
-        name: 'Aputure LS 600d Pro Kit Completo',
-        brand: 'Aputure',
-        model: 'LS 600d Pro',
-        serialNumber: 'AP-600D-7731',
-        category: 'Iluminação',
-        description: 'Cabeça LED, caixa de controle, hiper-refletor, cabo Neutrik 7.5m e bolsa rolante.',
-        acquisitionValue: 14800,
-        condition: 'Perfeito',
-        status: 'DISPONÍVEL',
-        location: 'Sala B1 — Iluminação & Grip',
-        notes: 'Testado e conferido.',
-        photos: [],
-        usageCount: 28
-      },
-      {
-        id: 'unit-006',
-        code: 'OLF-AUD-000001',
-        name: 'Sound Devices MixPre-6 II',
-        brand: 'Sound Devices',
-        model: 'MixPre-6 II',
-        serialNumber: 'SD-MP6-4410',
-        category: 'Áudio',
-        description: 'Gravador multipista com sled de baterias Sony L-Series e fonte AC.',
-        acquisitionValue: 9600,
-        condition: 'Em Revisão Técnica',
-        status: 'EM MANUTENÇÃO',
-        location: 'Laboratório de Manutenção Técnica',
-        notes: 'Calibração da entrada XLR Canal 2 e atualização de firmware.',
-        photos: [],
-        usageCount: 16
-      },
-      {
-        id: 'unit-007',
-        code: 'OLF-EST-000001',
-        name: 'DJI Ronin 2 Professional Combo',
-        brand: 'DJI',
-        model: 'Ronin 2',
-        serialNumber: 'DJI-R2-99104',
-        category: 'Estabilizadores',
-        description: 'Inclui anel grip, 2 baterias TB50, hub carregador, controle remoto e case.',
-        acquisitionValue: 48000,
-        condition: 'Perfeito',
-        status: 'DISPONÍVEL',
-        location: 'Sala B1 — Iluminação & Grip',
-        notes: 'Motores balanceados e calibrados.',
-        photos: [],
-        usageCount: 22
-      },
-      {
-        id: 'unit-008',
-        code: 'OLF-ENE-000001',
-        name: 'Kit 4x Baterias V-Mount 150Wh + Carregador Duplo',
-        brand: 'Core SWX',
-        model: 'Hypercore NEO 150',
-        serialNumber: 'CSWX-150-3301',
-        category: 'Energia e baterias',
-        description: '4 células V-Mount 14.8V 150Wh com saída D-Tap/USB e carregador simultâneo.',
-        acquisitionValue: 11200,
-        condition: 'Perfeito',
-        status: 'DISPONÍVEL',
-        location: 'Estante D2 — Energia, Baterias & Cabos',
-        notes: 'Saúde das células em 98%.',
-        photos: [],
-        usageCount: 35
-      }
-    ];
+    const INITIAL_UNITS = [];
 
-    const INITIAL_MOVEMENTS = [
-      {
-        id: 'mov-init-1',
-        type: 'RETIRADA',
-        unitId: 'unit-002',
-        unitCode: 'OLF-CAM-000002',
-        unitName: 'Sony FX3 Full-Frame Cinema Line (Unidade B)',
-        holderName: 'Lucas Mendes (Diretor de Fotografia)',
-        purpose: 'Diária Externa / Captação Principal',
-        project: 'Longa-Metragem: Horizonte Vermelho',
-        timestamp: '2026-11-13T08:30:00Z',
-        expectedReturn: '2026-11-18T19:00:00Z',
-        authorizedBy: 'Cristian Oliveira',
-        conditionOut: 'Perfeito',
-        status: 'EM ABERTO'
-      },
-      {
-        id: 'mov-init-2',
-        type: 'RETIRADA',
-        unitId: 'unit-004',
-        unitCode: 'OLF-LEN-000001',
-        unitName: 'Cooke Anamorphic/i 50mm T2.3',
-        holderName: 'Thiago Nogueira (1st AC)',
-        purpose: 'Filmagens Comerciais',
-        project: 'Campanha Institucional Bahia Solar',
-        timestamp: '2026-11-09T09:00:00Z',
-        expectedReturn: '2026-11-12T18:00:00Z',
-        authorizedBy: 'Mariana Vasconcelos',
-        conditionOut: 'Perfeito',
-        status: 'ATRASADO'
-      },
-      {
-        id: 'mov-init-3',
-        type: 'MANUTENÇÃO',
-        unitId: 'unit-006',
-        unitCode: 'OLF-AUD-000001',
-        unitName: 'Sound Devices MixPre-6 II',
-        holderName: 'Laboratório Técnico Oliv Films',
-        purpose: 'Calibração pré-amplificador XLR Canal 2',
-        project: 'Manutenção Preventiva',
-        timestamp: '2026-11-11T14:00:00Z',
-        authorizedBy: 'Mariana Vasconcelos',
-        conditionOut: 'Bom',
-        status: 'EM MANUTENÇÃO'
-      },
-      {
-        id: 'mov-init-4',
-        type: 'CADASTRO',
-        unitId: 'unit-003',
-        unitCode: 'OLF-CAM-000003',
-        unitName: 'ARRI ALEXA Mini LF (Unidade Principal)',
-        holderName: 'Cofre A1 — Câmeras & Sensores',
-        purpose: 'Tombamento Patrimonial Inicial e Geração de QR Code',
-        project: 'Acervo Permanente Oliv Films',
-        timestamp: '2024-09-20T14:00:00Z',
-        authorizedBy: 'Cristian Oliveira',
-        conditionOut: 'Perfeito',
-        status: 'CONCLUÍDO'
-      }
-    ];
+    const INITIAL_MOVEMENTS = [];
 
     const DEFAULT_SETTINGS = {
       companyName: 'OLIV FILMS',
@@ -392,13 +125,13 @@
       logoFile: 'Oliv_Films_simbolo_4K.jpg',
       logoDataUrl: '',
       qrLinkMode: 'WHATSAPP', // 'WHATSAPP' | 'DIRECTORY' | 'CUSTOM_URL'
-      ownerContactName: 'Cristian Oliveira — Direção Oliv Films',
-      ownerWhatsapp: '5571999999999',
-      ownerPhoneDisplay: '(71) 99999-9999',
-      ownerEmail: 'cristianoliveira727@gmail.com',
-      ownerAddress: 'Central de Equipamentos Oliv Films — Salvador / BA',
+      ownerContactName: '',
+      ownerWhatsapp: '',
+      ownerPhoneDisplay: '',
+      ownerEmail: '',
+      ownerAddress: '',
       lostFoundMessage: 'Este equipamento pertence ao acervo patrimonial da produtora OLIV FILMS. Caso tenha encontrado este item fora de operação, entre em contato imediatamente pelos canais abaixo para devolução.',
-      customDirectoryUrl: 'https://olivfilms.com.br/contato'
+      customDirectoryUrl: ''
     };
 
     // =========================================================================
