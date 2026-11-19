@@ -868,7 +868,7 @@
           ['movements', state.movements]
         ];
         for (const [table, items] of groups) {
-          const rows = (items || []).map(item => ({ id: String(item.id), data: item }));
+          const rows = (items || []).map(item => ({ id: typeof item === 'string' ? item : String(item.id), data: item }));
           if (rows.length) {
             const { error } = await supabaseClient.from(table).upsert(rows, { onConflict: 'id' });
             if (error) throw error;
