@@ -750,20 +750,27 @@
         ['categories', 'categories'], ['locations', 'locations'],
         ['movements', 'movements']
       ];
-      const results = await Promise.all(tables.map(async ([table, key]) => {
-        const { data, error } = await supabaseClient.from(table).select('id,data');
-        if (error) throw error;
-        return [key, (data || []).map(row => row.data)];
-      }));
-      results.forEach(([key, value]) => { state[key] = value; });
-      const { data: settings, error: settingsError } = await supabaseClient
-        .from('company_settings').select('data').eq('id', 'default').maybeSingle();
-      if (settingsError) throw settingsError;
-      state.companySettings = Object.assign({}, DEFAULT_SETTINGS, settings?.data || {});
-      const { data: profile, error: profileError } = await supabaseClient
-        .from('profiles').select('*').eq('id', (await supabaseClient.auth.getUser()).data.user.id).single();
-      if (profileError) throw profileError;
-      state.currentUser = profileToUser(profile);
+      const authResult = await supabaseClient.auth.getUser();
+      if (authResult.error) throw authResult.error;
+      const userId = authResult.data?.user?.id;
+      if (!userId) throw new Error('Sessão não encontrada. Entre novamente.');
+
+      // Carrega inventário, configurações e perfil em paralelo para reduzir
+      // o tempo entre a autenticação e a abertura da tela principal.
+      const [tableResults, settingsResult, profileResult] = await Promise.all([
+        Promise.all(tables.map(async ([table, key]) => {
+          const { data, error } = await supabaseClient.from(table).select('id,data');
+          if (error) throw error;
+          return [key, (data || []).map(row => row.data)];
+        })),
+        supabaseClient.from('company_settings').select('data').eq('id', 'default').maybeSingle(),
+        supabaseClient.from('profiles').select('*').eq('id', userId).single()
+      ]);
+      tableResults.forEach(([key, value]) => { state[key] = value; });
+      if (settingsResult.error) throw settingsResult.error;
+      state.companySettings = Object.assign({}, DEFAULT_SETTINGS, settingsResult.data?.data || {});
+      if (profileResult.error) throw profileResult.error;
+      state.currentUser = profileToUser(profileResult.data);
       if (state.currentUser.role === 'ADMIN') {
         const { data: profiles, error: profilesError } = await supabaseClient.from('profiles').select('*').order('created_at');
         if (profilesError) throw profilesError;
@@ -852,7 +859,7 @@
       }
     }
 
-    async function submitCloudLogin(email, password) {
+    let loginSubmissionInProgress = false;\n\n    async function submitCloudLogin(email, password) {
       if (!supabaseClient) throw new Error('Cliente Supabase indisponível. Verifique a configuração.');
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) throw error;
@@ -3682,8 +3689,16 @@
       const form = e.target;
 
       if (form.id === 'login-form') {
+        if (loginSubmissionInProgress) return;
         const email = document.getElementById('login-email').value.trim().toLowerCase();
         const pass = document.getElementById('login-password').value;
+        const submitButton = form.querySelector('button[type="submit"]');
+        loginSubmissionInProgress = true;
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.textContent = 'Entrando... aguarde';
+          submitButton.classList.add('opacity-60', 'cursor-wait');
+        }
         state.authEmail = email;
         state.authPassword = '';
         try {
@@ -3691,6 +3706,8 @@
         } catch (error) {
           state.authError = error.message || 'E-mail ou senha inválidos.';
           renderApp();
+        } finally {
+          loginSubmissionInProgress = false;
         }
       }
 
