@@ -4106,26 +4106,43 @@
     window.onload = async function () {
       const params = new URLSearchParams(window.location.search);
       const achado = params.get('achado') || params.get('eqp');
-      if (achado) {
-        const found = findUnitByScannedValue(achado);
-        state.lostFoundUnit = found || {
-          code: achado.toUpperCase(),
-          name: 'Equipamento Cinematográfico Oliv Films',
-          serialNumber: 'Identificado via QR Code'
-        };
-      }
+      const fallbackFoundUnit = achado ? {
+        code: achado.toUpperCase(),
+        name: 'Equipamento Cinematográfico Oliv Films',
+        serialNumber: 'Identificado via QR Code'
+      } : null;
+
       if (!supabaseClient) {
+        state.lostFoundUnit = fallbackFoundUnit;
         state.authError = 'Conexão com o Supabase não carregou. Atualize a página ou confira supabase-config.js.';
         renderApp();
         return;
       }
+
       console.info('[Oliv Films] Inicialização: verificando sessão salva...');
       const sessionStartedAt = performance.now();
       const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
       console.info('[Oliv Films] Inicialização: verificação de sessão em', Math.round(performance.now() - sessionStartedAt) + ' ms', '| sessão encontrada:', Boolean(sessionData?.session?.user));
       if (sessionError) console.error('[Oliv Films] Erro ao recuperar sessão salva:', sessionError);
-      if (sessionData?.session?.user) await finishCloudLogin(sessionData.session.user, 'restauração automática');
-      else renderApp();
+
+      if (sessionData?.session?.user) {
+        await finishCloudLogin(sessionData.session.user, 'restauração automática');
+        if (achado) state.lostFoundUnit = findUnitByScannedValue(achado) || fallbackFoundUnit;
+      } else if (achado) {
+        // Visitantes sem login consultam somente os campos públicos do item identificado.
+        try {
+          const { data, error } = await supabaseClient.rpc('lookup_equipment_for_found_item', { p_code: achado });
+          if (error) throw error;
+          state.lostFoundUnit = data || fallbackFoundUnit;
+        } catch (error) {
+          console.error('[Oliv Films] Não foi possível consultar o item pelo QR Code:', error);
+          state.lostFoundUnit = fallbackFoundUnit;
+        }
+        renderApp();
+      } else {
+        renderApp();
+      }
+
       supabaseClient.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT') {
           stopProfileRealtime();
