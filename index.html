@@ -638,7 +638,8 @@
             accessRevocationInProgress = false;
             return;
           }
-          if (state.isAuthenticated) renderApp();
+          // Não reconstruir a interface durante a verificação periódica:
+          // isso interromperia formulários que o usuário esteja preenchendo.
         } catch (error) {
           console.warn('[Oliv Films] Falha temporária ao verificar o status da conta:', error);
         }
